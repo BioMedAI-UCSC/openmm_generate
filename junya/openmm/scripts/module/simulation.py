@@ -47,8 +47,17 @@ def run(pdbid=str, input_pdb_path=str, atomSubset=None):
     # Simulation Options
     steps = 1000
     equilibrationSteps = 1000
-    platform = Platform.getPlatformByName('CUDA')
-    platformProperties = {'Precision': 'single'}
+    platformNames = [Platform.getPlatform(i).getName() for i in range(Platform.getNumPlatforms())]
+    if 'CUDA' in platformNames:
+        platform = Platform.getPlatformByName('CUDA')
+        platformProperties = {'Precision': 'single'}
+    elif 'OpenCL'in platformNames:
+        platform = Platform.getPlatformByName('OpenCL')
+        platformProperties = {'Precision': 'single'}
+    else:
+        platform = None
+        platformProperties = {}
+    print(f"Simulation platform: {platform.getName()}, {platformProperties}")
 
     # Reporters
     hdf5Reporter = HDF5Reporter(f'../data/{pdbid}/result/output_{pdbid}.h5', 100, atomSubset=atomSubset)
