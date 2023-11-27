@@ -129,8 +129,8 @@ def run(pdbid=str, input_pdb_path=str, atomSubset=None):
     simulation.saveState(f"../data/{pdbid}/simulation/final_state.xml")
 
     state = simulation.context.getState(getPositions=True, enforcePeriodicBox=system.usesPeriodicBoundaryConditions())
-    with open(f"../data/{pdbid}/simulation/final_state.pdbx", mode="w") as file:
-        PDBxFile.writeFile(simulation.topology, state.getPositions(), file)
+    with open(f"../data/{pdbid}/simulation/final_state.pdb", mode="w") as file:
+        PDBFile.writeFile(simulation.topology, state.getPositions(), file)
 
     
     # Write positions and forces to output h5 file
