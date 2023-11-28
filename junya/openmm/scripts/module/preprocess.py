@@ -3,6 +3,8 @@ import openmm.app as app
 from openmm import unit
 import pdbfixer
 import requests
+import json
+from module import ligands
 from module import function
 
 
@@ -67,6 +69,12 @@ def prepare_protein(pdbid=str):
     ph = 7.0
     fixer.addMissingHydrogens(ph)
 
+    # make modeller
+    modeller = app.Modeller(fixer.topology, fixer.positions)
+
+    # add ligands back to the prepaired protein
+    small_molecules = ligands.replace_ligands(pdb_path, modeller)
+
     print("\nAfter the process")
     print(f"Missing residues: {fixer.missingResidues}")
     print(f"Missing terminals: {fixer.missingTerminals}")
@@ -74,13 +82,15 @@ def prepare_protein(pdbid=str):
 
     # set the forcefield
     forcefield = app.ForceField("amber14-all.xml", "amber14/tip3pfb.xml")
+    if small_molecules:
+        ligands.add_ff_template_generator_from_smiles(forcefield, small_molecules)
 
-    # make modeller
     # solvent model: tip3p. Default is NaCl
-    modeller = app.Modeller(fixer.topology, fixer.positions)
     modeller.addSolvent(forcefield, padding=1.0 * unit.nanometers, ionicStrength=0.15 * unit.molar)
 
-    # write the processed pdb file
+    # write the processed pdb file & ligand templates
     top = modeller.getTopology()
     pos = modeller.getPositions()
     app.PDBFile.writeFile(top, pos, open(f'../data/{pdbid}/processed/{pdbid}_processed.pdb', 'w'))
+    if small_molecules:
+        json.dump(small_molecules, open(f'../data/{pdbid}/processed/{pdbid}_processed_ligands_smiles.json', 'w'))
