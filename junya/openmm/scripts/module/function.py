@@ -56,6 +56,14 @@ class ProteinAtom():
         
         return self.indices
 
+def get_non_water_atom_indexes(topology):
+    """
+    Get the atom indices for all non-water residues in the topology.
+
+    Returns:
+    - indices (numpy.ndarray): An array of atom indices from protein.
+    """
+    return np.array([a.index for a in topology.atoms() if a.residue.name != 'HOH'])
 
 def create_folder(folder_path):
     """
