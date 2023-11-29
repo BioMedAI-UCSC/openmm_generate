@@ -45,16 +45,17 @@ def run(pdbid=str, input_pdb_path=str, atomSubset=None):
     barostatInterval = 25
 
     # Simulation Options
-    steps = 1000
-    equilibrationSteps = 1000
+    steps = 100
+    equilibrationSteps = 100
+    reportInterval = int(steps/10)
     platform = Platform.getPlatformByName('CUDA')
     platformProperties = {'Precision': 'single'}
 
     # Reporters
-    hdf5Reporter = HDF5Reporter(f'../data/{pdbid}/result/output_{pdbid}.h5', 100, atomSubset=atomSubset)
-    dataReporter = StateDataReporter(f'../data/{pdbid}/simulation/log.txt', 100, totalSteps=steps,
+    hdf5Reporter = HDF5Reporter(f'../data/{pdbid}/result/output_{pdbid}.h5', reportInterval, atomSubset=atomSubset)
+    dataReporter = StateDataReporter(f'../data/{pdbid}/simulation/log.txt', reportInterval, totalSteps=steps,
         step=True, speed=True, progress=True, potentialEnergy=True, temperature=True, separator='\t')
-    checkpointReporter = CheckpointReporter(f'../data/{pdbid}/simulation/checkpoint.chk', 100)
+    checkpointReporter = CheckpointReporter(f'../data/{pdbid}/simulation/checkpoint.chk', reportInterval)
 
     # Prepare the Simulation
     print('Building system...')
@@ -89,7 +90,7 @@ def run(pdbid=str, input_pdb_path=str, atomSubset=None):
     simulation.currentStep = 0
 
     from sys import stdout
-    simulation.reporters.append(StateDataReporter(stdout, 100, step=True, 
+    simulation.reporters.append(StateDataReporter(stdout, reportInterval, step=True, 
         progress=True, remainingTime=True, speed=True, totalSteps=steps, 
         separator="\t"))
 
