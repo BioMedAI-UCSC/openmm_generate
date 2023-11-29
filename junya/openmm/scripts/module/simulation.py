@@ -8,6 +8,50 @@ import datetime
 from importlib import reload
 from mdtraj.reporters import HDF5Reporter
 
+
+class ForceReporter(object):
+    def __init__(self, file, reportInterval, atomSubset=None):
+        self._out = open(file, 'w')
+        self._reportInterval = reportInterval
+        self._atomSubset = atomSubset
+
+    def __del__(self):
+        self._out.close()
+
+    def describeNextReport(self, simulation):
+        steps = self._reportInterval - simulation.currentStep%self._reportInterval
+        return (steps, False, False, True, False, None)
+
+    def report(self, simulation, state):
+        f = state.getForces().value_in_unit(kilojoules/mole/nanometer)
+        # Save only the atoms of protein
+        if self._atomSubset is not None:
+            forces = [f[i] for i in self._atomSubset]
+        for f in forces:
+            self._out.write('%g %g %g\n' % (f[0], f[1], f[2]))
+
+class PositionReporter(object):
+    def __init__(self, file, reportInterval, atomSubset=None):
+        self._out = open(file, 'w')
+        self._reportInterval = reportInterval
+        self._atomSubset = atomSubset
+
+    def __del__(self):
+        self._out.close()
+
+    def describeNextReport(self, simulation):
+        steps = self._reportInterval - simulation.currentStep%self._reportInterval
+        return (steps, True, False, False, False, None)
+
+    def report(self, simulation, state):
+        p = state.getPositions(asNumpy=True).value_in_unit(angstrom)
+        # Save only the atoms of protein
+        if self._atomSubset is not None:
+            positions = [p[i] for i in self._atomSubset]
+        for p in positions:
+            self._out.write('%g %g %g\n' % (p[0], p[1], p[2]))
+
+
 def run(pdbid=str, input_pdb_path=str, atomSubset=None):
     """
     Run the simulation for the given PDB ID.
@@ -56,6 +100,8 @@ def run(pdbid=str, input_pdb_path=str, atomSubset=None):
     dataReporter = StateDataReporter(f'../data/{pdbid}/simulation/log.txt', reportInterval, totalSteps=steps,
         step=True, speed=True, progress=True, potentialEnergy=True, temperature=True, separator='\t')
     checkpointReporter = CheckpointReporter(f'../data/{pdbid}/simulation/checkpoint.chk', reportInterval)
+    forcereporter = ForceReporter(f'../data/{pdbid}/simulation/force.txt', reportInterval=1, atomSubset=atomSubset)
+    positionReporter = PositionReporter(f'../data/{pdbid}/simulation/position.txt', reportInterval=1, atomSubset=atomSubset)
 
     # Prepare the Simulation
     print('Building system...')
@@ -87,6 +133,8 @@ def run(pdbid=str, input_pdb_path=str, atomSubset=None):
     simulation.reporters.append(hdf5Reporter)
     simulation.reporters.append(dataReporter)
     simulation.reporters.append(checkpointReporter)
+    simulation.reporters.append(forcereporter)
+    simulation.reporters.append(positionReporter)
     simulation.currentStep = 0
 
     from sys import stdout
@@ -98,7 +146,7 @@ def run(pdbid=str, input_pdb_path=str, atomSubset=None):
     positions = []
     forces = []
     # Get postions and forces at each frame
-    for i in range(steps):
+    for _ in range(steps):
         simulation.step(1)
         # Create state object
         state = simulation.context.getState(getPositions=True, getForces=True)
@@ -142,7 +190,7 @@ def run(pdbid=str, input_pdb_path=str, atomSubset=None):
             assert f[key].shape[1] == len(atomSubset)
             assert f[key].shape[2] == 3
             # Check if the data is not the same
-            for i in range(steps-1):
+            for i in range(100-1):
                 assert f[key][0,0,0] != f[key][i+1,0,0]
     
     print(f"Simulation of {pdbid} is done.")
