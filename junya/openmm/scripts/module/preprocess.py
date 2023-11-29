@@ -33,8 +33,6 @@ def prepare_protein(pdbid=str):
         f.write(r.content)
 
     fixer = pdbfixer.PDBFixer(pdb_path)
-    # remove heterogens other than water
-    fixer.removeHeterogens()
 
     # find missing residues and atoms
     fixer.findMissingResidues()
