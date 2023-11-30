@@ -185,11 +185,11 @@ def run(pdbid=str, input_pdb_path=str, atomSubset=None):
     del forces, positions
     
     # delete the numpyfiles
-    # for file_path in [file_p, file_f]:
-    #     try:
-    #         os.remove(file_path)
-    #     except OSError as e:
-    #         print(f"Error: {e.filename} - {e.strerror}")        
+    for file_path in [file_p, file_f]:
+        try:
+            os.remove(file_path)
+        except OSError as e:
+            print(f"Error: {e.filename} - {e.strerror}")        
     
     # Assert the data
     with h5py.File(f"../data/{pdbid}/result/output_{pdbid}.h5", "a") as f:
