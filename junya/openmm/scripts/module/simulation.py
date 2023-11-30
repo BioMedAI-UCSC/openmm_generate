@@ -23,11 +23,11 @@ def get_pos_force(simulation=Simulation, atomSubset=None):
     state = simulation.context.getState(getPositions=True, getForces=True)
     p = state.getPositions(asNumpy=True).value_in_unit(nanometer)
     f = state.getForces(asNumpy=True).value_in_unit(kilojoules/mole/nanometer)
-
+    
     # Save only the atoms of protein
     if atomSubset is not None:
-        positions = np.array([p[i] for i in atomSubset])
-        forces = np.array([f[i] for i in atomSubset])
+        positions = p[atomSubset]
+        forces = f[atomSubset]
     else:
         positions = np.array(p)
         forces = np.array(f)
@@ -102,7 +102,7 @@ def run(pdbid=str, input_pdb_path=str, atomSubset=None):
     platformProperties = {'Precision': 'single'}
 
     # Reporters
-    hdf5Reporter = HDF5Reporter(f'../data/{pdbid}/result/output_{pdbid}.h5', reportInterval, atomSubset=atomSubset)
+    hdf5Reporter = HDF5Reporter(f'../data/{pdbid}/result/output_{pdbid}.h5', reportInterval=1, atomSubset=atomSubset)
     dataReporter = StateDataReporter(f'../data/{pdbid}/simulation/log.txt', reportInterval, totalSteps=steps,
         step=True, speed=True, progress=True, potentialEnergy=True, temperature=True, separator='\t')
     checkpointReporter = CheckpointReporter(f'../data/{pdbid}/simulation/checkpoint.chk', reportInterval)
@@ -186,11 +186,11 @@ def run(pdbid=str, input_pdb_path=str, atomSubset=None):
     del forces, positions
     
     # delete the numpyfiles
-    for file_path in [file_p, file_f]:
-        try:
-            os.remove(file_path)
-        except OSError as e:
-            print(f"Error: {e.filename} - {e.strerror}")        
+    # for file_path in [file_p, file_f]:
+    #     try:
+    #         os.remove(file_path)
+    #     except OSError as e:
+    #         print(f"Error: {e.filename} - {e.strerror}")        
     
     # Assert the data
     with h5py.File(f"../data/{pdbid}/result/output_{pdbid}.h5", "a") as f:
@@ -207,7 +207,7 @@ def run(pdbid=str, input_pdb_path=str, atomSubset=None):
 
         # # Check if the data is the same
         # assert f["coordinates"][0,0,0] == f["positions"][0,0,0], "The coordinates and positions are not the same."
-        # assert f["coordinates"][reportInterval,0,0] == f["positions"][reportInterval,0,0], "The coordinates and positions are not the same."
+        # assert f["coordinates"][reportInterval,0,0] == f["positions"][reportInterval,0,0], "The coordinates and positions are not the same."s
         
     print(f"Simulation of {pdbid} is done.")
     print(f"Result is here: {f'../data/{pdbid}/result/output_{pdbid}.h5'}")
