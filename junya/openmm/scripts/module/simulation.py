@@ -5,7 +5,6 @@ import numpy as np
 from mdtraj.reporters import HDF5Reporter
 import h5py
 from mdtraj.reporters import HDF5Reporter
-import os
 
 
 def get_pos_force(simulation=Simulation, atomSubset=None):
@@ -206,8 +205,15 @@ def run(pdbid=str, input_pdb_path=str, atomSubset=None):
                 assert f[key][0,0,0] != f[key][i+1,0,0]
 
         # # Check if the data is the same
-        # assert f["coordinates"][0,0,0] == f["positions"][0,0,0], "The coordinates and positions are not the same."
-        # assert f["coordinates"][reportInterval,0,0] == f["positions"][reportInterval,0,0], "The coordinates and positions are not the same."s
+        for i in range(5):
+            for j in range(5):
+                assert f["coordinates"][i,j,0] == f["positions"][i,j,0], "The coordinates and positions are not the same."
+        
+        # FIXME : The y values of coordinates(from HDF5Reporter) and those of positions(from get_pos_force) dont match. Why?
+        # x and z values match, but only y values don't.
+        # I checked the initial positions and found the coordinates were not correct and the positions were correct.
+        # So, I think the problem is in the HDF5Reporter.
+
         
     print(f"Simulation of {pdbid} is done.")
     print(f"Result is here: {f'../data/{pdbid}/result/output_{pdbid}.h5'}")
