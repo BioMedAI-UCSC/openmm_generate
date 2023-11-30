@@ -21,7 +21,7 @@ def get_pos_force(simulation=Simulation, atomSubset=None):
     forces (numpy.ndarray): The forces acting on the atoms.
     """
     state = simulation.context.getState(getPositions=True, getForces=True)
-    p = state.getPositions(asNumpy=True).value_in_unit(angstrom)
+    p = state.getPositions(asNumpy=True).value_in_unit(nanometer)
     f = state.getForces(asNumpy=True).value_in_unit(kilojoules/mole/nanometer)
 
     # Save only the atoms of protein
@@ -204,6 +204,10 @@ def run(pdbid=str, input_pdb_path=str, atomSubset=None):
             # Check if the data is not the same
             for i in range(10-1):
                 assert f[key][0,0,0] != f[key][i+1,0,0]
-    
+
+        # # Check if the data is the same
+        # assert f["coordinates"][0,0,0] == f["positions"][0,0,0], "The coordinates and positions are not the same."
+        # assert f["coordinates"][reportInterval,0,0] == f["positions"][reportInterval,0,0], "The coordinates and positions are not the same."
+        
     print(f"Simulation of {pdbid} is done.")
     print(f"Result is here: {f'../data/{pdbid}/result/output_{pdbid}.h5'}")
