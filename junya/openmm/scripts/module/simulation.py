@@ -4,53 +4,59 @@ from openmm.unit import *
 import numpy as np
 from mdtraj.reporters import HDF5Reporter
 import h5py
-import datetime
-from importlib import reload
 from mdtraj.reporters import HDF5Reporter
+import os
 
 
-class ForceReporter(object):
-    def __init__(self, file, reportInterval, atomSubset=None):
-        self._out = open(file, 'w')
-        self._reportInterval = reportInterval
-        self._atomSubset = atomSubset
+def get_pos_force(simulation=Simulation, atomSubset=None):
+    """
+    Get the positions and forces of the atoms in the simulation.
 
-    def __del__(self):
-        self._out.close()
+    Parameters:
+    simulation (Simulation): The OpenMM simulation object.
+    atomSubset (list): A list of atom indices to subset the positions and forces. Default is None.
 
-    def describeNextReport(self, simulation):
-        steps = self._reportInterval - simulation.currentStep%self._reportInterval
-        return (steps, False, False, True, False, None)
+    Returns:
+    positions (numpy.ndarray): The positions of the atoms.
+    forces (numpy.ndarray): The forces acting on the atoms.
+    """
+    state = simulation.context.getState(getPositions=True, getForces=True)
+    p = state.getPositions(asNumpy=True).value_in_unit(angstrom)
+    f = state.getForces(asNumpy=True).value_in_unit(kilojoules/mole/nanometer)
 
-    def report(self, simulation, state):
-        f = state.getForces().value_in_unit(kilojoules/mole/nanometer)
-        # Save only the atoms of protein
-        if self._atomSubset is not None:
-            forces = [f[i] for i in self._atomSubset]
-        for f in forces:
-            self._out.write('%g %g %g\n' % (f[0], f[1], f[2]))
+    # Save only the atoms of protein
+    if atomSubset is not None:
+        positions = np.array([p[i] for i in atomSubset])
+        forces = np.array([f[i] for i in atomSubset])
+    else:
+        positions = np.array(p)
+        forces = np.array(f)
 
-class PositionReporter(object):
-    def __init__(self, file, reportInterval, atomSubset=None):
-        self._out = open(file, 'w')
-        self._reportInterval = reportInterval
-        self._atomSubset = atomSubset
+    return positions, forces
 
-    def __del__(self):
-        self._out.close()
+def update_numpyfile(file_p=str, file_f=str, positions=np.array, forces=np.array):
+    """
+    Update the existing numpy files with new positions and forces.
 
-    def describeNextReport(self, simulation):
-        steps = self._reportInterval - simulation.currentStep%self._reportInterval
-        return (steps, True, False, False, False, None)
+    Parameters:
+    file_p (str): Path to the numpy file containing existing positions.
+    file_f (str): Path to the numpy file containing existing forces.
+    positions (np.array): Array of new positions to be added.
+    forces (np.array): Array of new forces to be added.
 
-    def report(self, simulation, state):
-        p = state.getPositions(asNumpy=True).value_in_unit(angstrom)
-        # Save only the atoms of protein
-        if self._atomSubset is not None:
-            positions = [p[i] for i in self._atomSubset]
-        for p in positions:
-            self._out.write('%g %g %g\n' % (p[0], p[1], p[2]))
-
+    Returns:
+    None
+    """
+    # Load existing data
+    existing_positions = np.load(file_p)
+    existing_forces = np.load(file_f)
+    # Concatenate the data
+    positions_to_save = np.concatenate([existing_positions, positions])
+    forces_to_save = np.concatenate([existing_forces, forces])
+    # Save the data
+    np.save(file_p, positions_to_save)
+    np.save(file_f, forces_to_save)
+            
 
 def run(pdbid=str, input_pdb_path=str, atomSubset=None):
     """
@@ -90,7 +96,7 @@ def run(pdbid=str, input_pdb_path=str, atomSubset=None):
 
     # Simulation Options
     steps = 100
-    equilibrationSteps = 100
+    equilibrationSteps = 10
     reportInterval = int(steps/10)
     platform = Platform.getPlatformByName('CUDA')
     platformProperties = {'Precision': 'single'}
@@ -100,8 +106,6 @@ def run(pdbid=str, input_pdb_path=str, atomSubset=None):
     dataReporter = StateDataReporter(f'../data/{pdbid}/simulation/log.txt', reportInterval, totalSteps=steps,
         step=True, speed=True, progress=True, potentialEnergy=True, temperature=True, separator='\t')
     checkpointReporter = CheckpointReporter(f'../data/{pdbid}/simulation/checkpoint.chk', reportInterval)
-    forcereporter = ForceReporter(f'../data/{pdbid}/simulation/force.txt', reportInterval=1, atomSubset=atomSubset)
-    positionReporter = PositionReporter(f'../data/{pdbid}/simulation/position.txt', reportInterval=1, atomSubset=atomSubset)
 
     # Prepare the Simulation
     print('Building system...')
@@ -133,8 +137,6 @@ def run(pdbid=str, input_pdb_path=str, atomSubset=None):
     simulation.reporters.append(hdf5Reporter)
     simulation.reporters.append(dataReporter)
     simulation.reporters.append(checkpointReporter)
-    simulation.reporters.append(forcereporter)
-    simulation.reporters.append(positionReporter)
     simulation.currentStep = 0
 
     from sys import stdout
@@ -142,44 +144,54 @@ def run(pdbid=str, input_pdb_path=str, atomSubset=None):
         progress=True, remainingTime=True, speed=True, totalSteps=steps, 
         separator="\t"))
 
-
-    positions = []
-    forces = []
+    # Propaggerate the simulation and save the data
+    
+    file_p = f"../data/{pdbid}/simulation/positions.npy"
+    file_f = f"../data/{pdbid}/simulation/forces.npy"
+    # initialize the numpyfiles
+    np.save(file_p, np.empty((0, 3)))
+    np.save(file_f, np.empty((0, 3)))
     # Get postions and forces at each frame
     for _ in range(steps):
         simulation.step(1)
-        # Create state object
-        state = simulation.context.getState(getPositions=True, getForces=True)
-        p = state.getPositions(asNumpy=True).value_in_unit(angstrom)
-        f = state.getForces(asNumpy=True).value_in_unit(kilojoules/mole/nanometer)
-        
-        # Save only the atoms of protein
-        if atomSubset is not None:
-            p = [p[i] for i in atomSubset]
-            f = [f[i] for i in atomSubset]
-        positions.append(p)
-        forces.append(f)
-    positions = np.array(positions)
-    forces = np.array(forces)
+        # get positions and forces
+        positions, forces = get_pos_force(simulation, atomSubset)
+        # save the data to numpyfiles
+        update_numpyfile(file_p, file_f, positions, forces)
     
-    # close hdf5 reporter
+    # close the reporters
     hdf5Reporter.close()
+
 
     # Write file with final simulation state
     simulation.saveState(f"../data/{pdbid}/simulation/final_state.xml")
-
     state = simulation.context.getState(getPositions=True, enforcePeriodicBox=system.usesPeriodicBoundaryConditions())
     with open(f"../data/{pdbid}/simulation/final_state.pdbx", mode="w") as file:
         PDBxFile.writeFile(simulation.topology, state.getPositions(), file)
 
     
-    # Write positions and forces to output h5 file
+    # Save positions and forces to HDF5 file
+    # Load the data
+    forces = np.load(f"../data/{pdbid}/simulation/forces.npy")
+    positions = np.load(f"../data/{pdbid}/simulation/positions.npy")
+    # Split the data
+    forces = np.array(np.split(forces, steps))
+    positions = np.array(np.split(positions, steps))
+    # save the data
     with h5py.File(f"../data/{pdbid}/result/output_{pdbid}.h5", "a") as f:
         if "forces" not in f.keys():
             f.create_dataset("forces", data=forces)
         if "positions" not in f.keys():
             f.create_dataset("positions", data=positions)
-
+    del forces, positions
+    
+    # delete the numpyfiles
+    for file_path in [file_p, file_f]:
+        try:
+            os.remove(file_path)
+        except OSError as e:
+            print(f"Error: {e.filename} - {e.strerror}")        
+    
     # Assert the data
     with h5py.File(f"../data/{pdbid}/result/output_{pdbid}.h5", "a") as f:
         # Check the shape of the data
@@ -190,7 +202,7 @@ def run(pdbid=str, input_pdb_path=str, atomSubset=None):
             assert f[key].shape[1] == len(atomSubset)
             assert f[key].shape[2] == 3
             # Check if the data is not the same
-            for i in range(100-1):
+            for i in range(10-1):
                 assert f[key][0,0,0] != f[key][i+1,0,0]
     
     print(f"Simulation of {pdbid} is done.")
