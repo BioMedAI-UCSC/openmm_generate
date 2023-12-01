@@ -81,7 +81,9 @@ def prepare_protein(pdbid=str, remove_ligands=False):
     # set the forcefield
     forcefield = app.ForceField("amber14-all.xml", "amber14/tip3pfb.xml")
     if small_molecules:
-        ligands.add_ff_template_generator_from_smiles(forcefield, small_molecules)
+        json.dump(small_molecules, open(f'../data/{pdbid}/processed/{pdbid}_processed_ligands_smiles.json', 'w'))
+        template_cache_path = f'../data/{pdbid}/processed/{pdbid}_processed_ligands_cache.json'
+        ligands.add_ff_template_generator_from_smiles(forcefield, small_molecules, cache_path=template_cache_path)
 
     # solvent model: tip3p. Default is NaCl
     modeller.addSolvent(forcefield, padding=1.0 * unit.nanometers, ionicStrength=0.15 * unit.molar)
@@ -90,5 +92,3 @@ def prepare_protein(pdbid=str, remove_ligands=False):
     top = modeller.getTopology()
     pos = modeller.getPositions()
     app.PDBFile.writeFile(top, pos, open(f'../data/{pdbid}/processed/{pdbid}_processed.pdb', 'w'))
-    if small_molecules:
-        json.dump(small_molecules, open(f'../data/{pdbid}/processed/{pdbid}_processed_ligands_smiles.json', 'w'))

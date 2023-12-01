@@ -4,7 +4,6 @@ from openmm.unit import *
 import numpy as np
 from mdtraj.reporters import HDF5Reporter
 import h5py
-import json
 import os
 from mdtraj.reporters import HDF5Reporter
 from module import ligands
@@ -81,12 +80,9 @@ def run(pdbid=str, input_pdb_path=str, load_ligand_smiles=True, atomSubset=None)
 
     if load_ligand_smiles:
         input_ligands_path = os.path.splitext(input_pdb_path)[0]+"_ligands_smiles.json"
+        template_cache_path = os.path.splitext(input_pdb_path)[0]+"_ligands_cache.json"
         if os.path.exists(input_ligands_path):
-            with open(input_ligands_path, "r") as f:
-                small_molecules = json.load(f)
-                if small_molecules:
-                    ligands.add_ff_template_generator_from_smiles(forcefield, small_molecules)
-                print(f"Added {len(small_molecules)} small molecule templates to forcefield")
+            ligands.add_ff_template_generator_from_json(forcefield, input_ligands_path, template_cache_path)
         else:
             print(f"'{input_ligands_path}' does not exist, skipping template generation.")
 

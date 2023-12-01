@@ -8,6 +8,8 @@ from rdkit.Chem import AllChem
 from openff.toolkit import Molecule
 from openmmforcefields.generators import GAFFTemplateGenerator
 
+import json
+
 from module import pdb_lookup
 
 def replace_ligands(pdb_filename, modeller, smiles_templates=True, remove_ligands=False):
@@ -113,18 +115,20 @@ def replace_ligands(pdb_filename, modeller, smiles_templates=True, remove_ligand
 
     return small_molecules
 
-def add_ff_template_generator(forcefield, small_molecules):
+def add_ff_template_generator_from_json(forcefield, small_molecules_path, cache_path=None):
     """
     Add a GAFFTemplateGenerator to forcefield for the molecules listed in small_molecules.
 
     Parameters:
     - forcefield (openmm.app.ForceField): The forcefield object to add the generator to
-    - small_molecules (list(openff.toolkit.Molecule): A list of molecules to build templates for
+    - small_molecules_smiles (list(str)): A list of SMILES strings to build templates for
     """
-    gaff = GAFFTemplateGenerator(molecules=small_molecules)
-    forcefield.registerTemplateGenerator(gaff.generator)
+    with open(small_molecules_path, "r") as f:
+        small_molecules_smiles = json.load(f)
 
-def add_ff_template_generator_from_smiles(forcefield, small_molecules_smiles):
+    add_ff_template_generator_from_smiles(forcefield, small_molecules_smiles, cache_path)
+
+def add_ff_template_generator_from_smiles(forcefield, small_molecules_smiles, cache_path=None):
     """
     Add a GAFFTemplateGenerator to forcefield for the molecules listed in small_molecules.
 
@@ -139,5 +143,7 @@ def add_ff_template_generator_from_smiles(forcefield, small_molecules_smiles):
         template_mol = Molecule.from_rdkit(template, allow_undefined_stereo=True)
         small_molecules.append(template_mol)
 
-    gaff = GAFFTemplateGenerator(molecules=small_molecules)
+    gaff = GAFFTemplateGenerator(molecules=small_molecules, cache=cache_path)
     forcefield.registerTemplateGenerator(gaff.generator)
+
+    print(f"Added {len(small_molecules)} small molecule templates to forcefield")
