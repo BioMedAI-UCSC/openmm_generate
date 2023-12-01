@@ -4,8 +4,10 @@ from openmm.unit import *
 import numpy as np
 from mdtraj.reporters import HDF5Reporter
 import h5py
+import json
+import os
 from mdtraj.reporters import HDF5Reporter
-
+from module import ligands
 
 def get_pos_force(simulation=Simulation, atomSubset=None):
     """
@@ -57,7 +59,7 @@ def update_numpyfile(file_p=str, file_f=str, positions=np.array, forces=np.array
     np.save(file_f, forces_to_save)
             
 
-def run(pdbid=str, input_pdb_path=str, atomSubset=None):
+def run(pdbid=str, input_pdb_path=str, load_ligand_smiles=True, atomSubset=None):
     """
     Run the simulation for the given PDB ID.
 
@@ -76,6 +78,15 @@ def run(pdbid=str, input_pdb_path=str, atomSubset=None):
     # Input Files
     pdb = PDBFile(input_pdb_path)
     forcefield = ForceField('amber14-all.xml', 'amber14/tip3pfb.xml')
+
+    if load_ligand_smiles:
+        input_ligands_path = os.path.splitext(input_pdb_path)[0]+"_ligands_smiles.json"
+        # assert os.path.exists(input_ligands_path)
+        with open(input_ligands_path, "r") as f:
+            small_molecules = json.load(f)
+            if small_molecules:
+                ligands.add_ff_template_generator_from_smiles(forcefield, small_molecules)
+            print(f"Added {len(small_molecules)} small molecule templates to forcefield")
 
     # System Configuration
     nonbondedMethod = PME
@@ -97,8 +108,17 @@ def run(pdbid=str, input_pdb_path=str, atomSubset=None):
     steps = 100
     equilibrationSteps = 10
     reportInterval = int(steps/10)
-    platform = Platform.getPlatformByName('CUDA')
-    platformProperties = {'Precision': 'single'}
+    platformNames = [Platform.getPlatform(i).getName() for i in range(Platform.getNumPlatforms())]
+    if 'CUDA' in platformNames:
+        platform = Platform.getPlatformByName('CUDA')
+        platformProperties = {'Precision': 'single'}
+    elif 'OpenCL'in platformNames:
+        platform = Platform.getPlatformByName('OpenCL')
+        platformProperties = {'Precision': 'single'}
+    else:
+        platform = None
+        platformProperties = {}
+    print(f"Simulation platform: {platform.getName()}, {platformProperties}")
 
     # Reporters
     hdf5Reporter = HDF5Reporter(f'../data/{pdbid}/result/output_{pdbid}.h5', reportInterval=1, atomSubset=atomSubset)
@@ -165,8 +185,8 @@ def run(pdbid=str, input_pdb_path=str, atomSubset=None):
     # Write file with final simulation state
     simulation.saveState(f"../data/{pdbid}/simulation/final_state.xml")
     state = simulation.context.getState(getPositions=True, enforcePeriodicBox=system.usesPeriodicBoundaryConditions())
-    with open(f"../data/{pdbid}/simulation/final_state.pdbx", mode="w") as file:
-        PDBxFile.writeFile(simulation.topology, state.getPositions(), file)
+    with open(f"../data/{pdbid}/simulation/final_state.pdb", mode="w") as file:
+        PDBFile.writeFile(simulation.topology, state.getPositions(), file)
 
     
     # Save positions and forces to HDF5 file
