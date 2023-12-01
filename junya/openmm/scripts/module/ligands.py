@@ -10,7 +10,7 @@ from openmmforcefields.generators import GAFFTemplateGenerator
 
 from module import pdb_lookup
 
-def replace_ligands(pdb_filename, modeller, smiles_templates=True):
+def replace_ligands(pdb_filename, modeller, smiles_templates=True, remove_ligands=False):
     """
     Insert or replace ligand molecules in modeller with corrected topology based on RCSB templates.
 
@@ -19,6 +19,7 @@ def replace_ligands(pdb_filename, modeller, smiles_templates=True):
     - modeller (openmm.app.Modeller): The modeller structure to edit
     - smiles_templates (bool): If true return ligand templates as SMILEs strings,
                                if false return as openff.toolkit.Molecule objects
+    - remove_ligands (bool): If true remove the ligands without generating templates
 
     Returns:
     - small_molecules (list()): A list of the ligand templates inserted
@@ -83,6 +84,9 @@ def replace_ligands(pdb_filename, modeller, smiles_templates=True):
                 print("Removing", query_key)
                 to_delete.append(residue)
     modeller.delete(to_delete) 
+
+    if remove_ligands:
+        return []
 
     # Using the unmodified templates because I don't know how the amber toolkit
     # parameterization interacts with conformations.

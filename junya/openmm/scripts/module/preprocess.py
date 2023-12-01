@@ -8,7 +8,7 @@ from module import ligands
 from module import function
 
 
-def prepare_protein(pdbid=str):
+def prepare_protein(pdbid=str, remove_ligands=False):
     """
     Preprocesses a protein by downloading the PDB file, fixing missing residues and atoms,
     adding missing hydrogens, adding solvent, and writing the processed PDB file.
@@ -71,7 +71,7 @@ def prepare_protein(pdbid=str):
     modeller = app.Modeller(fixer.topology, fixer.positions)
 
     # add ligands back to the prepaired protein
-    small_molecules = ligands.replace_ligands(pdb_path, modeller)
+    small_molecules = ligands.replace_ligands(pdb_path, modeller, remove_ligands=remove_ligands)
 
     print("\nAfter the process")
     print(f"Missing residues: {fixer.missingResidues}")
