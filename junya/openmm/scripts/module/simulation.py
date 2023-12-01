@@ -34,6 +34,14 @@ def get_pos_force(simulation=Simulation, atomSubset=None):
 
     return positions, forces
 
+def insert_or_create_h5(h5file, name, data, step, steps):
+    insertable_data = data.reshape(tuple([1] + list(data.shape)))
+    if name not in h5file.keys():
+        h5file.create_dataset(name, data=insertable_data, chunks=True, maxshape=tuple([steps] + list(data.shape)))
+    else:
+        h5file[name].resize((h5file[name].shape[0] + insertable_data.shape[0]), axis = 0)
+        h5file[name][-insertable_data.shape[0]:] = insertable_data
+
 def update_numpyfile(file_p=str, file_f=str, positions=np.array, forces=np.array):
     """
     Update the existing numpy files with new positions and forces.
@@ -58,7 +66,7 @@ def update_numpyfile(file_p=str, file_f=str, positions=np.array, forces=np.array
     np.save(file_f, forces_to_save)
             
 
-def run(pdbid=str, input_pdb_path=str, load_ligand_smiles=True, atomSubset=None):
+def run(pdbid=str, input_pdb_path=str, steps=100, load_ligand_smiles=True, atomSubset=None):
     """
     Run the simulation for the given PDB ID.
 
@@ -103,9 +111,8 @@ def run(pdbid=str, input_pdb_path=str, load_ligand_smiles=True, atomSubset=None)
     barostatInterval = 25
 
     # Simulation Options
-    steps = 100
     equilibrationSteps = 10
-    reportInterval = int(steps/10)
+    reportInterval = min(int(steps/10), 1000)
     platformNames = [Platform.getPlatform(i).getName() for i in range(Platform.getNumPlatforms())]
     if 'CUDA' in platformNames:
         platform = Platform.getPlatformByName('CUDA')
@@ -163,18 +170,28 @@ def run(pdbid=str, input_pdb_path=str, load_ligand_smiles=True, atomSubset=None)
 
     # Propaggerate the simulation and save the data
     
-    file_p = f"../data/{pdbid}/simulation/positions.npy"
-    file_f = f"../data/{pdbid}/simulation/forces.npy"
-    # initialize the numpyfiles
-    np.save(file_p, np.empty((0, 3)))
-    np.save(file_f, np.empty((0, 3)))
+    # file_p = f"../data/{pdbid}/simulation/positions.npy"
+    # file_f = f"../data/{pdbid}/simulation/forces.npy"
+
+    # Note: open in w mode to turncate if the file is already there
+    positions_and_forces_file = h5py.File(f"../data/{pdbid}/simulation/positions_and_forces.h5", 'w')
+
     # Get postions and forces at each frame
-    for _ in range(steps):
+    for i in range(steps):
         simulation.step(1)
         # get positions and forces
         positions, forces = get_pos_force(simulation, atomSubset)
-        # save the data to numpyfiles
-        update_numpyfile(file_p, file_f, positions, forces)
+        positions = positions.astype(np.float32)
+        forces = forces.astype(np.float32)
+        insert_or_create_h5(positions_and_forces_file, "positions", positions, i, steps)
+        insert_or_create_h5(positions_and_forces_file, "forces", forces, i, steps)
+
+        if (i % reportInterval) == 0:
+            # Flush data to disk
+            # positions_and_forces_file.close()
+            # positions_and_forces_file = h5py.File(f"../data/{pdbid}/simulation/positions_and_forces.npy", 'a')
+            if "positions" in positions_and_forces_file.keys():
+                print("positions and forces:", positions_and_forces_file["positions"].shape, positions_and_forces_file["forces"].shape)
     
     # close the reporters
     hdf5Reporter.close()
@@ -189,38 +206,38 @@ def run(pdbid=str, input_pdb_path=str, load_ligand_smiles=True, atomSubset=None)
     
     # Save positions and forces to HDF5 file
     # Load the data
-    forces = np.load(f"../data/{pdbid}/simulation/forces.npy")
-    positions = np.load(f"../data/{pdbid}/simulation/positions.npy")
+    # forces = np.load(f"../data/{pdbid}/simulation/forces.npy")
+    # positions = np.load(f"../data/{pdbid}/simulation/positions.npy")
     # Split the data
-    forces = np.array(np.split(forces, steps))
-    positions = np.array(np.split(positions, steps))
+    # forces = np.array(np.split(forces, steps))
+    # positions = np.array(np.split(positions, steps))
     # save the data
-    with h5py.File(f"../data/{pdbid}/result/output_{pdbid}.h5", "a") as f:
-        if "forces" not in f.keys():
-            f.create_dataset("forces", data=forces)
-        if "positions" not in f.keys():
-            f.create_dataset("positions", data=positions)
-    del forces, positions
+    # with h5py.File(f"../data/{pdbid}/result/output_{pdbid}.h5", "a") as f:
+    #     if "forces" not in f.keys():
+    #         f.create_dataset("forces", data=forces)
+    #     if "positions" not in f.keys():
+    #         f.create_dataset("positions", data=positions)
+    # del forces, positions
     
-    # delete the numpyfiles
-    for file_path in [file_p, file_f]:
-        try:
-            os.remove(file_path)
-        except OSError as e:
-            print(f"Error: {e.filename} - {e.strerror}")        
+    # # delete the numpyfiles
+    # for file_path in [file_p, file_f]:
+    #     try:
+    #         os.remove(file_path)
+    #     except OSError as e:
+    #         print(f"Error: {e.filename} - {e.strerror}")        
     
-    # Assert the data
-    with h5py.File(f"../data/{pdbid}/result/output_{pdbid}.h5", "a") as f:
-        # Check the shape of the data
-        assert f["positions"].shape == f["forces"].shape
-        # Check the dimension of the data
-        for key in ["positions", "forces"]:
-            assert f[key].shape[0] == steps
-            assert f[key].shape[1] == len(atomSubset)
-            assert f[key].shape[2] == 3
-            # Check if the data is not the same
-            for i in range(10-1):
-                assert f[key][0,0,0] != f[key][i+1,0,0]
+    # # Assert the data
+    # with h5py.File(f"../data/{pdbid}/result/output_{pdbid}.h5", "a") as f:
+    #     # Check the shape of the data
+    #     assert f["positions"].shape == f["forces"].shape
+    #     # Check the dimension of the data
+    #     for key in ["positions", "forces"]:
+    #         assert f[key].shape[0] == steps
+    #         assert f[key].shape[1] == len(atomSubset)
+    #         assert f[key].shape[2] == 3
+    #         # Check if the data is not the same
+    #         for i in range(10-1):
+    #             assert f[key][0,0,0] != f[key][i+1,0,0]
 
         # # # Check if the data is the same
         # for i in range(5):
