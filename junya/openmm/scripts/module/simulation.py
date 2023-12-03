@@ -35,6 +35,18 @@ def get_pos_force(simulation=Simulation, atomSubset=None):
     return positions, forces
 
 def insert_or_create_h5(h5file, name, data, steps):
+    """
+    Append data to a dataset in the passed HDF5 file, creating the dataset if necessary.
+
+    Args:
+        h5file (h5py.File): The file to write to.
+        name (str): The name of the dataset to append to.
+        data (numpy.array): The data to append.
+        steps (int): The maximum number of steps in the simulation, which will set the
+                     maximum size for the dataset if it needs to be created.
+    Returns:
+        None
+    """
     insertable_data = data.reshape(tuple([1] + list(data.shape)))
     if name not in h5file.keys():
         h5file.create_dataset(name, data=insertable_data, chunks=True, maxshape=tuple([steps] + list(data.shape)))
@@ -204,5 +216,5 @@ def run(pdbid=str, input_pdb_path=str, steps=100, load_ligand_smiles=True, atomS
 
         
     print(f"Simulation of {pdbid} is done.")
-    print(f"Result is here: {f'../data/{pdbid}/result/output_{pdbid}.h5'}\n")
+    print(f"Result is here: {f'../data/{pdbid}/result/output_{pdbid}.h5'}")
     print(f"                {f'../data/{pdbid}/result/positions_and_forces_{pdbid}.h5'}\n")
