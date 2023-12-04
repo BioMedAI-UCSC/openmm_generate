@@ -12,12 +12,13 @@
 #SBATCH --output=slurm.out
 #SBATCH --array=0
 
+eval "$(~/bin/micromamba shell hook -s posix)"
 micromamba activate openmm
 
 #export OMP_NUM_THREADS=2  # if code is not multithreaded, otherwise set to 8 or 16
 export OMP_NUM_THREADS=32
 echo "TASK_ID", $SLURM_ARRAY_TASK_ID
-srun -N 1 -n 1 python generate_data.py $SLURM_ARRAY_TASK_ID
+srun -N 1 -n 1 python3 generate_data.py $SLURM_ARRAY_TASK_ID
 # py-torch example, --ntasks-per-node=1 --cpus-per-task=64
 # srun python3 multiple_gpu.py
 
