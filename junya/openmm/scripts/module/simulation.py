@@ -2,11 +2,10 @@ from openmm import *
 from openmm.app import *
 from openmm.unit import *
 import numpy as np
-from mdtraj.reporters import HDF5Reporter
 import h5py
 import os
-from mdtraj.reporters import HDF5Reporter
 from module import ligands
+from module.reporters import ExtendedH5MDReporter
 
 def get_pos_force(simulation=Simulation, atomSubset=None):
     """
@@ -116,8 +115,8 @@ def run(pdbid=str, input_pdb_path=str, steps=100, load_ligand_smiles=True, atomS
     # Reporters
     try:
         hdf5Reporter = None
-        positions_and_forces_file = None
-        hdf5Reporter = HDF5Reporter(f'../data/{pdbid}/result/output_{pdbid}.h5', reportInterval, atomSubset=atomSubset)
+
+        hdf5Reporter = ExtendedH5MDReporter(f'../data/{pdbid}/result/output_{pdbid}.h5', 1, total_steps=steps, atom_subset=atomSubset, use_gzip=True)
         dataReporter = StateDataReporter(f'../data/{pdbid}/simulation/log.txt', reportInterval, totalSteps=steps,
             step=True, speed=True, progress=True, potentialEnergy=True, temperature=True, separator='\t')
         checkpointReporter = CheckpointReporter(f'../data/{pdbid}/simulation/checkpoint.chk', reportInterval)
@@ -160,25 +159,9 @@ def run(pdbid=str, input_pdb_path=str, steps=100, load_ligand_smiles=True, atomS
             separator="\t"))
 
         # Propaggerate the simulation and save the data
-
-        # Create the positions and foces data file, opening in w mode wil truncate the file is it already exists
-        positions_and_forces_file = h5py.File(f"../data/{pdbid}/result/positions_and_forces_{pdbid}.h5", 'w')
-
-        # Get postions and forces at each frame
-        for i in range(steps):
-            simulation.step(1)
-            # get positions and forces
-            positions, forces = get_pos_force(simulation, atomSubset)
-            # Convert values to single precision
-            positions = positions.astype(np.float32)
-            forces = forces.astype(np.float32)
-            insert_or_create_h5(positions_and_forces_file, "positions", positions, steps)
-            insert_or_create_h5(positions_and_forces_file, "forces", forces, steps)
+        simulation.step(steps)
 
     finally:
-        # close the positions & forces file
-        if positions_and_forces_file:
-            positions_and_forces_file.close()
         # close the reporters
         if hdf5Reporter:
             hdf5Reporter.close()
@@ -189,14 +172,13 @@ def run(pdbid=str, input_pdb_path=str, steps=100, load_ligand_smiles=True, atomS
     with open(f"../data/{pdbid}/simulation/final_state.pdb", mode="w") as file:
         PDBFile.writeFile(simulation.topology, state.getPositions(), file)
 
-    # TODO: Copy positions & forces to result/output_{pdbid}.h5 
-    
     # Assert the data
-    with h5py.File(f"../data/{pdbid}/result/positions_and_forces_{pdbid}.h5", "r") as f:
+    with h5py.File(f"../data/{pdbid}/result/output_{pdbid}.h5", "r") as f:
         # Check the shape of the data
-        assert f["positions"].shape == f["forces"].shape
+        assert f["coordinates"].shape == f["forces"].shape
         # Check the dimension of the data
-        for key in ["positions", "forces"]:
+        for key in ["coordinates", "forces"]:
+            print(key, f[key].shape)
             assert f[key].shape[0] == steps
             assert f[key].shape[1] == len(atomSubset)
             assert f[key].shape[2] == 3
@@ -217,4 +199,3 @@ def run(pdbid=str, input_pdb_path=str, steps=100, load_ligand_smiles=True, atomS
         
     print(f"Simulation of {pdbid} is done.")
     print(f"Result is here: {f'../data/{pdbid}/result/output_{pdbid}.h5'}")
-    print(f"                {f'../data/{pdbid}/result/positions_and_forces_{pdbid}.h5'}\n")
