@@ -7,52 +7,6 @@ import os
 from module import ligands
 from module.reporters import ExtendedH5MDReporter
 
-def get_pos_force(simulation=Simulation, atomSubset=None):
-    """
-    Get the positions and forces of the atoms in the simulation.
-
-    Parameters:
-    simulation (Simulation): The OpenMM simulation object.
-    atomSubset (list): A list of atom indices to subset the positions and forces. Default is None.
-
-    Returns:
-    positions (numpy.ndarray): The positions of the atoms.
-    forces (numpy.ndarray): The forces acting on the atoms.
-    """
-    state = simulation.context.getState(getPositions=True, getForces=True)
-    p = state.getPositions(asNumpy=True).value_in_unit(nanometer)
-    f = state.getForces(asNumpy=True).value_in_unit(kilojoules/mole/nanometer)
-    
-    # Save only the atoms of protein
-    if atomSubset is not None:
-        positions = p[atomSubset]
-        forces = f[atomSubset]
-    else:
-        positions = np.array(p)
-        forces = np.array(f)
-
-    return positions, forces
-
-def insert_or_create_h5(h5file, name, data, steps):
-    """
-    Append data to a dataset in the passed HDF5 file, creating the dataset if necessary.
-
-    Args:
-        h5file (h5py.File): The file to write to.
-        name (str): The name of the dataset to append to.
-        data (numpy.array): The data to append.
-        steps (int): The maximum number of steps in the simulation, which will set the
-                     maximum size for the dataset if it needs to be created.
-    Returns:
-        None
-    """
-    insertable_data = data.reshape(tuple([1] + list(data.shape)))
-    if name not in h5file.keys():
-        h5file.create_dataset(name, data=insertable_data, chunks=True, maxshape=tuple([steps] + list(data.shape)))
-    else:
-        h5file[name].resize((h5file[name].shape[0] + insertable_data.shape[0]), axis = 0)
-        h5file[name][-insertable_data.shape[0]:] = insertable_data
-
 def run(pdbid=str, input_pdb_path=str, steps=100, load_ligand_smiles=True, atomSubset=None):
     """
     Run the simulation for the given PDB ID.
@@ -186,16 +140,5 @@ def run(pdbid=str, input_pdb_path=str, steps=100, load_ligand_smiles=True, atomS
             for i in range(10-1):
                 assert f[key][0,0,0] != f[key][i+1,0,0]
 
-        # # # Check if the data is the same
-        # for i in range(5):
-        #     for j in range(5):
-        #         assert f["coordinates"][i,j,0] == f["positions"][i,j,0], "The coordinates and positions are not the same."
-        
-        # FIXME : In 10GS, the y values of coordinates(from HDF5Reporter) and those of positions(from get_pos_force) dont match. Why?
-        # x and z values match, but only y values don't.
-        # I checked the initial positions and found the coordinates were not correct and the positions were correct.
-        # So, I think the problem is in the HDF5Reporter.
-
-        
     print(f"Simulation of {pdbid} is done.")
-    print(f"Result is here: {f'../data/{pdbid}/result/output_{pdbid}.h5'}")
+    print(f"Result is here: {f'../data/{pdbid}/result/output_{pdbid}.h5'}\n")
