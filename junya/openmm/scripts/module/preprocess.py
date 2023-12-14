@@ -85,6 +85,11 @@ def prepare_protein(pdbid=str, remove_ligands=False):
         template_cache_path = f'../data/{pdbid}/processed/{pdbid}_processed_ligands_cache.json'
         ligands.add_ff_template_generator_from_smiles(forcefield, small_molecules, cache_path=template_cache_path)
 
+    # Small molecules we've added templates for will be named "UNK"
+    unmatched_residues = [r for r in forcefield.getUnmatchedResidues(modeller.topology) if r.name != "UNK"]
+    if unmatched_residues:
+        raise RuntimeError("Structure still contains unmatched residues after fixup: " + str(unmatched_residues))
+
     # solvent model: tip3p. Default is NaCl
     modeller.addSolvent(forcefield, padding=1.0 * unit.nanometers, ionicStrength=0.15 * unit.molar)
 
