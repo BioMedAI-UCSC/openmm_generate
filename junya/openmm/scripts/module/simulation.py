@@ -70,7 +70,7 @@ def run(pdbid=str, input_pdb_path=str, steps=100, load_ligand_smiles=True, atomS
     try:
         hdf5Reporter = None
 
-        hdf5Reporter = ExtendedH5MDReporter(f'../data/{pdbid}/result/output_{pdbid}.h5', 1, total_steps=steps, atom_subset=atomSubset, use_gzip=True)
+        hdf5Reporter = ExtendedH5MDReporter(f'../data/{pdbid}/result/output_{pdbid}.h5', 1, total_steps=steps, atom_subset=atomSubset)
         dataReporter = StateDataReporter(f'../data/{pdbid}/simulation/log.txt', reportInterval, totalSteps=steps,
             step=True, speed=True, progress=True, potentialEnergy=True, temperature=True, separator='\t')
         checkpointReporter = CheckpointReporter(f'../data/{pdbid}/simulation/checkpoint.chk', reportInterval)
