@@ -9,6 +9,10 @@ import json
 import mdtraj
 from mdtraj.utils import unitcell
 
+import time
+import threading
+import queue
+
 # The following code is taken from mdtraj/mdtraj/formats/hdf5.py and is LGPL licenced:
 ##############################################################################
 # MDTraj: A Python Library for Loading, Saving, and Manipulating
@@ -107,10 +111,10 @@ def generate_cell_info(state, units):
 
 class ExtendedH5MDReporter:
     """
-    A h5py based H5MDReporter that saves forces data.
+    A threaded h5py reporter based on H5MDReporter that saves forces data.
     """
 
-    def __init__(self, filename, report_interval, total_steps, atom_subset=None, use_gzip=True):
+    def __init__(self, filename, report_interval, total_steps, atom_subset=None, use_gzip=False):
         """
         Parameters:
         - filename (str): The path the save the H5MD file to.
@@ -127,6 +131,11 @@ class ExtendedH5MDReporter:
         self.use_gzip = use_gzip
 
         self.h5 = h5py.File(filename, 'w') # Create or truncate file
+        self.h5_initialized = False
+
+        self._worker_thread_queue = queue.Queue(2) # Create a 2 deep work queue
+        self.worker_thread = threading.Thread(target=self._worker_thread_run)
+        self.worker_thread.start()
 
     def add_attr_string(self, obj, name, value):
         """
@@ -223,27 +232,28 @@ class ExtendedH5MDReporter:
         # Called by OpenMM with the data requested in self.describeNextReport()
         positions = state.getPositions(asNumpy=True).value_in_unit(nanometer)
         forces = state.getForces(asNumpy=True).value_in_unit(kilojoules/mole/nanometer)
+        cell_info = generate_cell_info(state, nanometer)
+        time = state.getTime().value_in_unit(picoseconds)
+        potentialEnergy = state.getPotentialEnergy().value_in_unit(kilojoules/mole)
+        kineticEnergy = state.getKineticEnergy().value_in_unit(kilojoules/mole)
 
         if self.atom_subset is not None:
             positions = positions[self.atom_subset]
             forces = forces[self.atom_subset]
-        
+
         positions = positions[np.newaxis,:].astype(np.float32)
         forces = forces[np.newaxis,:].astype(np.float32)
 
-        cell_info = generate_cell_info(state, nanometer)
         cell_lengths = cell_info["cell_lengths"][np.newaxis,:].astype(np.float32)
         cell_angles  = cell_info["cell_angles"][np.newaxis,:].astype(np.float32)
-
-        time = state.getTime().value_in_unit(picoseconds)
-        potentialEnergy = state.getPotentialEnergy().value_in_unit(kilojoules/mole)
-        kineticEnergy = state.getKineticEnergy().value_in_unit(kilojoules/mole)
 
         time = np.array([time], dtype=np.float32)
         potentialEnergy = np.array([potentialEnergy], dtype=np.float32)
         kineticEnergy = np.array([kineticEnergy], dtype=np.float32)
 
-        if not "topology" in self.h5.keys():
+        if not self.h5_initialized:
+            self.h5_initialized = True
+
             topology_json = topology_to_H5MD_json(simulation.topology, atom_indices=self.atom_subset.tolist())
             self.write_str_dataset("topology", topology_json)
             self.init_metadata()
@@ -256,21 +266,45 @@ class ExtendedH5MDReporter:
             self.new_dataset("potentialEnergy", potentialEnergy, "kilojoules/mole")
             self.new_dataset("kineticEnergy", kineticEnergy, "kilojoules/mole")
         else:
-            self.append_data("coordinates", positions)
-            self.append_data("forces", forces)
-            self.append_data("cell_lengths", cell_lengths)
-            self.append_data("cell_angles", cell_angles)
-            self.append_data("time", time)
-            self.append_data("potentialEnergy", potentialEnergy)
-            self.append_data("kineticEnergy", kineticEnergy)
+            data = {
+                "coordinates" : positions,
+                "forces" : forces,
+                "cell_lengths" : cell_lengths,
+                "cell_angles" : cell_angles,
+                "time" : time,
+                "potentialEnergy" : potentialEnergy,
+                "kineticEnergy" : kineticEnergy,
+            }
+
+            self._worker_thread_queue.put(data)
+
+    def _process_data(self, data):
+        # Called by the worker thread to append data to the h5 file
+        for k,v in data.items():
+            self.append_data(k, v)
+
+    def _worker_thread_run(self):
+        # Main function for the worker thread
+        while True:
+            data = self._worker_thread_queue.get()
+            if not data:
+                break
+            self._process_data(data)
 
     def close(self):
         """
-        Close the H5MD file.
+        Clean up and close the H5MD file.
 
         Returns:
         None
         """
+        if self.worker_thread:
+            t0 = time.time()
+            print(f"{self.__class__.__name__}: Waiting for worker thread to finish...")
+            self._worker_thread_queue.put(None) # Signal the thread to terminate
+            self.worker_thread.join()
+            print(f"{self.__class__.__name__}: Worker thread done in {round(time.time()-t0, 4)} seconds.")
+            self.worker_thread = None
         self.h5.close()
 
     def __del__(self):
