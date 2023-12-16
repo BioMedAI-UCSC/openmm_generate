@@ -4,6 +4,7 @@ from openmm import unit
 import pdbfixer
 import requests
 import json
+import os
 from module import ligands
 from module import function
 
@@ -27,10 +28,13 @@ def prepare_protein(pdbid=str, remove_ligands=False):
     pdb_url = f"https://files.rcsb.org/download/{pdbid}.pdb"
 
     # download pdb file
-    r = requests.get(pdb_url)
-    r.raise_for_status()
-    with open(pdb_path, "wb") as f:
-        f.write(r.content)
+    if not os.path.exists(pdb_path):
+        r = requests.get(pdb_url)
+        r.raise_for_status()
+        with open(pdb_path, "wb") as f:
+            f.write(r.content)
+    else:
+        print(f"{pdbid}.pdb already downloaded")
 
     fixer = pdbfixer.PDBFixer(pdb_path)
 
