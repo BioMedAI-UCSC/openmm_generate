@@ -20,11 +20,10 @@ def prepare_protein(pdbid=str, remove_ligands=False):
     Returns:
         None
     """
-    
     print(f"Preprocess of {pdbid}")
     # create folder
-    function.create_folder(f"../data/{pdbid}")
-    pdb_path = f"../data/{pdbid}/raw/{pdbid}.pdb"
+    function.create_folder(function.get_data_path(pdbid))
+    pdb_path = function.get_data_path(f"{pdbid}/raw/{pdbid}.pdb")
     pdb_url = f"https://files.rcsb.org/download/{pdbid}.pdb"
 
     # download pdb file
@@ -85,8 +84,8 @@ def prepare_protein(pdbid=str, remove_ligands=False):
     # set the forcefield
     forcefield = app.ForceField("amber14-all.xml", "amber14/tip3pfb.xml")
     if small_molecules:
-        json.dump(small_molecules, open(f'../data/{pdbid}/processed/{pdbid}_processed_ligands_smiles.json', 'w'))
-        template_cache_path = f'../data/{pdbid}/processed/{pdbid}_processed_ligands_cache.json'
+        json.dump(small_molecules, open(function.get_data_path(f'{pdbid}/processed/{pdbid}_processed_ligands_smiles.json'), 'w'))
+        template_cache_path = function.get_data_path(f'{pdbid}/processed/{pdbid}_processed_ligands_cache.json')
         ligands.add_ff_template_generator_from_smiles(forcefield, small_molecules, cache_path=template_cache_path)
 
     # Small molecules we've added templates for will be named "UNK"
@@ -100,4 +99,4 @@ def prepare_protein(pdbid=str, remove_ligands=False):
     # write the processed pdb file & ligand templates
     top = modeller.getTopology()
     pos = modeller.getPositions()
-    app.PDBFile.writeFile(top, pos, open(f'../data/{pdbid}/processed/{pdbid}_processed.pdb', 'w'))
+    app.PDBFile.writeFile(top, pos, open(function.get_data_path(f'{pdbid}/processed/{pdbid}_processed.pdb'), 'w'))

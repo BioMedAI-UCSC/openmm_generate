@@ -70,10 +70,10 @@ def run(pdbid=str, input_pdb_path=str, steps=100, load_ligand_smiles=True, atomS
     try:
         hdf5Reporter = None
 
-        hdf5Reporter = ExtendedH5MDReporter(f'../data/{pdbid}/result/output_{pdbid}.h5', 1, total_steps=steps, atom_subset=atomSubset)
-        dataReporter = StateDataReporter(f'../data/{pdbid}/simulation/log.txt', reportInterval, totalSteps=steps,
+        hdf5Reporter = ExtendedH5MDReporter(function.get_data_path(f'{pdbid}/result/output_{pdbid}.h5'), 1, total_steps=steps, atom_subset=atomSubset)
+        dataReporter = StateDataReporter(function.get_data_path(f'{pdbid}/simulation/log.txt'), reportInterval, totalSteps=steps,
             step=True, speed=True, progress=True, potentialEnergy=True, temperature=True, separator='\t')
-        checkpointReporter = CheckpointReporter(f'../data/{pdbid}/simulation/checkpoint.chk', reportInterval)
+        checkpointReporter = CheckpointReporter(function.get_data_path(f'{pdbid}/simulation/checkpoint.chk'), reportInterval)
 
         # Prepare the Simulation
         print('Building system...')
@@ -88,9 +88,9 @@ def run(pdbid=str, input_pdb_path=str, steps=100, load_ligand_smiles=True, atomS
         simulation.context.setPositions(positions)
 
         # Write XML serialized objects
-        with open(f"../data/{pdbid}/simulation/system.xml", mode="w") as file:
+        with open(function.get_data_path(f"{pdbid}/simulation/system.xml"), mode="w") as file:
             file.write(XmlSerializer.serialize(system))
-        with open(f"../data/{pdbid}/simulation/integrator.xml", mode="w") as file:
+        with open(function.get_data_path(f"{pdbid}/simulation/integrator.xml"), mode="w") as file:
             file.write(XmlSerializer.serialize(integrator))
 
         # Minimize and Equilibrate
@@ -121,13 +121,13 @@ def run(pdbid=str, input_pdb_path=str, steps=100, load_ligand_smiles=True, atomS
             hdf5Reporter.close()
 
     # Write file with final simulation state
-    simulation.saveState(f"../data/{pdbid}/simulation/final_state.xml")
+    simulation.saveState(function.get_data_path(f"{pdbid}/simulation/final_state.xml"))
     state = simulation.context.getState(getPositions=True, enforcePeriodicBox=system.usesPeriodicBoundaryConditions())
-    with open(f"../data/{pdbid}/simulation/final_state.pdb", mode="w") as file:
+    with open(function.get_data_path(f"{pdbid}/simulation/final_state.pdb"), mode="w") as file:
         PDBFile.writeFile(simulation.topology, state.getPositions(), file)
 
     # Assert the data
-    with h5py.File(f"../data/{pdbid}/result/output_{pdbid}.h5", "r") as f:
+    with h5py.File(function.get_data_path(f"{pdbid}/result/output_{pdbid}.h5"), "r") as f:
         # Check the shape of the data
         assert f["coordinates"].shape == f["forces"].shape
         # Check the dimension of the data
@@ -141,4 +141,4 @@ def run(pdbid=str, input_pdb_path=str, steps=100, load_ligand_smiles=True, atomS
                 assert f[key][0,0,0] != f[key][i+1,0,0]
 
     print(f"Simulation of {pdbid} is done.")
-    print(f"Result is here: {f'../data/{pdbid}/result/output_{pdbid}.h5'}\n")
+    print(f"Result is here: {function.get_data_path(f'{pdbid}/result/output_{pdbid}.h5')}\n")

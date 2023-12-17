@@ -2,7 +2,7 @@ from openmm.app.pdbfile import PDBFile
 import numpy as np
 import os
 
-
+_data_dir_path = "../data/"
 
 def get_non_water_atom_indexes(topology):
     """
@@ -32,8 +32,29 @@ def create_folder(folder_path):
     else:
         print(f"Folder already exists: {folder_path}")
 
+def set_data_dir(path):
+    """
+    Set the location of the data directory ("../data/" by default).
 
+    Args:
+        path (str): The path to the data directory.
+    """
+    global _data_dir_path
+    _data_dir_path = path
 
+def get_data_path(path=None):
+    """
+    Get the full path of "path" inside the current data directory.
+
+    Args:
+        path (str): The subdirectory append to the data directory path,
+                    or None to get the current data direcotry.
+    Returns:
+        str: The combined path.
+    """
+    if path is None:
+        path = ""
+    return os.path.join(_data_dir_path, path)
 
 def get_atomSubset(pdb_path=str):
     """
