@@ -5,6 +5,7 @@ import numpy as np
 import h5py
 import os
 from module import ligands
+from module import function
 from module.reporters import ExtendedH5MDReporter
 
 def run(pdbid=str, input_pdb_path=str, steps=100, load_ligand_smiles=True, atomSubset=None):
