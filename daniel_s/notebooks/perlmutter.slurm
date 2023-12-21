@@ -2,6 +2,8 @@
 #SBATCH -A m4229
 #SBATCH -C gpu
 #SBATCH -q regular
+#SBATCH --mail-user=dsabo@ucsc.edu
+#SBATCH --mail-type=ALL
 #SBATCH -t 11:58:00
 #SBATCH -N 1
 #SBATCH --ntasks-per-node=4
