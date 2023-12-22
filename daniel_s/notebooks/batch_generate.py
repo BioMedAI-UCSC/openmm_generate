@@ -67,7 +67,7 @@ def simulate_one(pdbid, data_dir=None, steps=10000):
     ok = True
     with RedirectOutputs() as log:
         try:
-            pdb_path = f'../data/{pdbid}/processed/{pdbid}_processed.pdb'
+            pdb_path = function.get_data_path(f'{pdbid}/processed/{pdbid}_processed.pdb')
             atom_indices = function.get_non_water_atom_indexes(PDBFile(pdb_path).getTopology())
             simulation.run(pdbid, pdb_path, steps, atomSubset=atom_indices)
         except Exception as e:
