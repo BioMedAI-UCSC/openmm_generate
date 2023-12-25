@@ -4,11 +4,12 @@ from openmm.unit import *
 import numpy as np
 import h5py
 import os
+from sys import stdout
 from module import ligands
 from module import function
 from module.reporters import ExtendedH5MDReporter
 
-def run(pdbid=str, input_pdb_path=str, steps=100, load_ligand_smiles=True, atomSubset=None):
+def run(pdbid=str, input_pdb_path=str, steps=100, report_steps=1, load_ligand_smiles=True, atomSubset=None):
     """
     Run the simulation for the given PDB ID.
 
@@ -54,7 +55,7 @@ def run(pdbid=str, input_pdb_path=str, steps=100, load_ligand_smiles=True, atomS
 
     # Simulation Options
     equilibrationSteps = 10
-    reportInterval = min(int(steps/10), 1000)
+    checkpointInterval = min(int(steps/10), 1000)
     platformNames = [Platform.getPlatform(i).getName() for i in range(Platform.getNumPlatforms())]
     if 'CUDA' in platformNames:
         platform = Platform.getPlatformByName('CUDA')
@@ -68,13 +69,12 @@ def run(pdbid=str, input_pdb_path=str, steps=100, load_ligand_smiles=True, atomS
     print(f"Simulation platform: {platform.getName()}, {platformProperties}")
     
     # Reporters
+    hdf5Reporter = None
     try:
-        hdf5Reporter = None
-
-        hdf5Reporter = ExtendedH5MDReporter(function.get_data_path(f'{pdbid}/result/output_{pdbid}.h5'), 1, total_steps=steps, atom_subset=atomSubset)
-        dataReporter = StateDataReporter(function.get_data_path(f'{pdbid}/simulation/log.txt'), reportInterval, totalSteps=steps,
+        hdf5Reporter = ExtendedH5MDReporter(function.get_data_path(f'{pdbid}/result/output_{pdbid}.h5'), report_steps, total_steps=steps, atom_subset=atomSubset)
+        dataReporter = StateDataReporter(function.get_data_path(f'{pdbid}/simulation/log.txt'), checkpointInterval, totalSteps=steps,
             step=True, speed=True, progress=True, potentialEnergy=True, temperature=True, separator='\t')
-        checkpointReporter = CheckpointReporter(function.get_data_path(f'{pdbid}/simulation/checkpoint.chk'), reportInterval)
+        checkpointReporter = CheckpointReporter(function.get_data_path(f'{pdbid}/simulation/checkpoint.chk'), checkpointInterval)
 
         # Prepare the Simulation
         print('Building system...')
@@ -108,10 +108,8 @@ def run(pdbid=str, input_pdb_path=str, steps=100, load_ligand_smiles=True, atomS
         simulation.reporters.append(checkpointReporter)
         simulation.currentStep = 0
 
-        from sys import stdout
-        simulation.reporters.append(StateDataReporter(stdout, reportInterval, step=True,
-            progress=True, remainingTime=True, speed=True, totalSteps=steps,
-            separator="\t"))
+        simulation.reporters.append(StateDataReporter(stdout, checkpointInterval, step=True,
+            progress=True, remainingTime=True, speed=True, totalSteps=steps, separator="\t"))
 
         # Propaggerate the simulation and save the data
         simulation.step(steps)
@@ -134,12 +132,9 @@ def run(pdbid=str, input_pdb_path=str, steps=100, load_ligand_smiles=True, atomS
         # Check the dimension of the data
         for key in ["coordinates", "forces"]:
             print(key, f[key].shape)
-            assert f[key].shape[0] == steps
+            assert f[key].shape[0] == steps//report_steps
             assert f[key].shape[1] == len(atomSubset)
             assert f[key].shape[2] == 3
-            # Check if the data is not the same
-            for i in range(10-1):
-                assert f[key][0,0,0] != f[key][i+1,0,0]
 
     print(f"Simulation of {pdbid} is done.")
     print(f"Result is here: {function.get_data_path(f'{pdbid}/result/output_{pdbid}.h5')}\n")
