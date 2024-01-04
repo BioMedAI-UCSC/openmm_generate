@@ -57,12 +57,16 @@ def prepare_one(pdbid, data_dir=None):
         finished_file.write(finished_str)
     print(" ", finished_str)
 
-def simulate_one(pdbid, data_dir=None, steps=10000, report_steps=1):
+def simulate_one(pdbid, data_dir=None, steps=10000, report_steps=1, force=False):
     if data_dir:
         function.set_data_dir(data_dir)
     finished_file_path = function.get_data_path(f'{pdbid}/simulation/finished.txt')
     if os.path.exists(finished_file_path):
-        os.remove(finished_file_path)
+        if force:
+            os.remove(finished_file_path)
+        else:
+            print("Skipping", pdbid, "(already finished)")
+            return
 
     if "CUDA_VISIBLE_DEVICES" in os.environ:
         print("Simulating", pdbid, "on gpu", os.environ["CUDA_VISIBLE_DEVICES"])
@@ -103,6 +107,7 @@ def main():
     parser.add_argument("pdbid_list", type=str, help="A json file containing an array of PDB ids to process")
     parser.add_argument("--batch-index", required=True, type=int)
     parser.add_argument("--batch-size", required=True, type=int)
+    parser.add_argument("-f", "--force", action='store_true')
     parser.add_argument("--pool-size", default=10, type=int, help="Number of simultaneous simulations to run")
     parser.add_argument("--steps", default=10000, type=int, help="Total number of steps to run")
     parser.add_argument("--report-steps", default=1, type=int, help="Save data every n-frames")
@@ -141,7 +146,8 @@ def main():
     with multiprocessing.Pool(args.pool_size, initializer=init_function, initargs=init_args) as pool:
         pending_results = []
         for pdbid in batch_pdbid_list:
-            pending_results += [pool.apply_async(simulate_one, (pdbid, args.data_dir, args.steps, args.report_steps))]
+            pending_results += [pool.apply_async(simulate_one,
+                                                 (pdbid, args.data_dir, args.steps, args.report_steps, args.force))]
         
         while pending_results:
             pending_results = [i for i in pending_results if not i.ready()]
