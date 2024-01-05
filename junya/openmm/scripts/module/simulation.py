@@ -4,22 +4,31 @@ from openmm.unit import *
 import numpy as np
 import h5py
 import os
+import math
 from sys import stdout
 from module import ligands
 from module import function
 from module.reporters import ExtendedH5MDReporter
 
-def run(pdbid=str, input_pdb_path=str, steps=100, report_steps=1, load_ligand_smiles=True, atomSubset=None):
+def run(pdbid=str, input_pdb_path=str, steps=100, report_steps=1, load_ligand_smiles=True, atomSubset=None,
+        resume_checkpoint=False, interrupt_callback=None):
     """
     Run the simulation for the given PDB ID.
 
     Args:
         pdbid (str): The PDB ID.
         input_pdb_path (str): The path to the input PDB file.
+        steps (int): The total number of steps to run.
+        report_steps (int): Data is written to the h5 file every 'report_steps' steps.
+        load_ligand_smiles (bool): If true load the ligand templates saved during prepare.
         atomSubset (list or None): List of atom indices to subset. Defaults to None.
+        resume_checkpoint (bool): If true try to resume from an existing checkpoint file, if false
+            start a new simulatin.
+        interrupt_callback (function): This function is called at every checkpoint interval (<1000 steps),
+            if it returns false then the simmulation is gracefully stopped.
 
     Returns:
-        None
+        (int): The last step completed.
     """
     
     
@@ -68,52 +77,79 @@ def run(pdbid=str, input_pdb_path=str, steps=100, report_steps=1, load_ligand_sm
         platformProperties = {}
     print(f"Simulation platform: {platform.getName()}, {platformProperties}")
     
+    if resume_checkpoint:
+        with h5py.File(function.get_data_path(f"{pdbid}/result/output_{pdbid}.h5"), "r") as f:
+            last_recorded_time = f["time"][-1]
+
     # Reporters
     hdf5Reporter = None
     try:
-        hdf5Reporter = ExtendedH5MDReporter(function.get_data_path(f'{pdbid}/result/output_{pdbid}.h5'), report_steps, total_steps=steps, atom_subset=atomSubset)
+        hdf5Reporter = ExtendedH5MDReporter(function.get_data_path(f'{pdbid}/result/output_{pdbid}.h5'), report_steps, total_steps=steps,
+                                            atom_subset=atomSubset, append_file=resume_checkpoint)
         dataReporter = StateDataReporter(function.get_data_path(f'{pdbid}/simulation/log.txt'), checkpointInterval, totalSteps=steps,
             step=True, speed=True, progress=True, potentialEnergy=True, temperature=True, separator='\t')
         checkpointReporter = CheckpointReporter(function.get_data_path(f'{pdbid}/simulation/checkpoint.chk'), checkpointInterval)
 
         # Prepare the Simulation
-        print('Building system...')
         topology = pdb.topology
         positions = pdb.positions
-        system = forcefield.createSystem(topology, nonbondedMethod=nonbondedMethod, nonbondedCutoff=nonbondedCutoff,
-            constraints=constraints, rigidWater=rigidWater, ewaldErrorTolerance=ewaldErrorTolerance, hydrogenMass=hydrogenMass)
-        system.addForce(MonteCarloBarostat(pressure, temperature, barostatInterval))
-        integrator = LangevinMiddleIntegrator(temperature, friction, dt)
-        integrator.setConstraintTolerance(constraintTolerance)
-        simulation = Simulation(topology, system, integrator, platform, platformProperties)
-        simulation.context.setPositions(positions)
 
-        # Write XML serialized objects
-        with open(function.get_data_path(f"{pdbid}/simulation/system.xml"), mode="w") as file:
-            file.write(XmlSerializer.serialize(system))
-        with open(function.get_data_path(f"{pdbid}/simulation/integrator.xml"), mode="w") as file:
-            file.write(XmlSerializer.serialize(integrator))
+        if not resume_checkpoint:
+            print('Building system...')
+            system = forcefield.createSystem(topology, nonbondedMethod=nonbondedMethod, nonbondedCutoff=nonbondedCutoff,
+                constraints=constraints, rigidWater=rigidWater, ewaldErrorTolerance=ewaldErrorTolerance, hydrogenMass=hydrogenMass)
+            system.addForce(MonteCarloBarostat(pressure, temperature, barostatInterval))
+            integrator = LangevinMiddleIntegrator(temperature, friction, dt)
+            integrator.setConstraintTolerance(constraintTolerance)
+            simulation = Simulation(topology, system, integrator, platform, platformProperties)
+            simulation.context.setPositions(positions)
 
-        # Minimize and Equilibrate
-        print('Performing energy minimization...')
-        simulation.minimizeEnergy()
-        print('Equilibrating...')
-        simulation.context.setVelocitiesToTemperature(temperature)
-        simulation.step(equilibrationSteps)
+            # Write XML serialized objects
+            with open(function.get_data_path(f"{pdbid}/simulation/system.xml"), mode="w") as file:
+                file.write(XmlSerializer.serialize(system))
+            with open(function.get_data_path(f"{pdbid}/simulation/integrator.xml"), mode="w") as file:
+                file.write(XmlSerializer.serialize(integrator))
+
+            # Minimize and Equilibrate
+            print('Performing energy minimization...')
+            simulation.minimizeEnergy()
+            print('Equilibrating...')
+            simulation.context.setVelocitiesToTemperature(temperature)
+            simulation.step(equilibrationSteps)
+            simulation.currentStep = 0
+
+        else: # resume_checkpoint
+            print('Loading saved system...')
+            system = function.get_data_path(f"{pdbid}/simulation/system.xml")
+            integrator = function.get_data_path(f"{pdbid}/simulation/integrator.xml")
+            simulation = Simulation(topology, system, integrator, platform, platformProperties)
+            simulation.loadCheckpoint(function.get_data_path(f'{pdbid}/simulation/checkpoint.chk'))
+
+            # Validate that the checkpoint steps matches the last step recorded in the h5 file
+            last_simulation_time = simulation.context.getTime().value_in_unit(picoseconds)
+            if not math.isclose(last_simulation_time, last_recorded_time, rel_tol=1e-3):
+                raise RuntimeError(f"Simulation time does not match last recorded time: {last_simulation_time} != {last_recorded_time}")
+
+            print(f"Resuming simulation from step {simulation.currentStep}...")
 
         # Simulate
         print('Simulating...')
         simulation.reporters.append(hdf5Reporter)
         simulation.reporters.append(dataReporter)
         simulation.reporters.append(checkpointReporter)
-        simulation.currentStep = 0
 
         simulation.reporters.append(StateDataReporter(stdout, checkpointInterval, step=True,
             progress=True, remainingTime=True, speed=True, totalSteps=steps, separator="\t"))
 
-        # Propaggerate the simulation and save the data
-        simulation.step(steps)
-
+        # Propagate the simulation and save the data
+        if not interrupt_callback:
+            simulation.step(steps - simulation.currentStep)
+        else:
+            while (steps - simulation.currentStep) > 0:
+                if not interrupt_callback():
+                    print(f"Simulation of {pdbid} interrupted at step {simulation.currentStep}")
+                    return simulation.currentStep
+                simulation.step(min(steps - simulation.currentStep, checkpointInterval))
     finally:
         # close the reporters
         if hdf5Reporter:
@@ -121,7 +157,7 @@ def run(pdbid=str, input_pdb_path=str, steps=100, report_steps=1, load_ligand_sm
 
     # Write file with final simulation state
     simulation.saveState(function.get_data_path(f"{pdbid}/simulation/final_state.xml"))
-    state = simulation.context.getState(getPositions=True, enforcePeriodicBox=system.usesPeriodicBoundaryConditions())
+    state = simulation.context.getState(getPositions=True, enforcePeriodicBox=simulation.system.usesPeriodicBoundaryConditions())
     with open(function.get_data_path(f"{pdbid}/simulation/final_state.pdb"), mode="w") as file:
         PDBFile.writeFile(simulation.topology, state.getPositions(), file)
 
@@ -138,3 +174,5 @@ def run(pdbid=str, input_pdb_path=str, steps=100, report_steps=1, load_ligand_sm
 
     print(f"Simulation of {pdbid} is done.")
     print(f"Result is here: {function.get_data_path(f'{pdbid}/result/output_{pdbid}.h5')}\n")
+
+    return simulation.currentStep
