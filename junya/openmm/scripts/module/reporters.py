@@ -114,7 +114,7 @@ class ExtendedH5MDReporter:
     A threaded h5py reporter based on H5MDReporter that saves forces data.
     """
 
-    def __init__(self, filename, report_interval, total_steps, atom_subset=None, use_gzip=False):
+    def __init__(self, filename, report_interval, total_steps, atom_subset=None, use_gzip=False, append_file=False):
         """
         Parameters:
         - filename (str): The path the save the H5MD file to.
@@ -130,8 +130,14 @@ class ExtendedH5MDReporter:
         self.atom_subset = atom_subset
         self.use_gzip = use_gzip
 
-        self.h5 = h5py.File(filename, 'w') # Create or truncate file
-        self.h5_initialized = False
+        if append_file and os.path.exists(filename):
+            self.h5 = h5py.File(filename, 'a') # Create or continue existing file
+            self.h5_initialized = True
+            if self.h5["time"].size == self.h5["time"].maxshape[0]:
+                raise RuntimeError(f"Can't continue '{filename}', the file is already full")
+        else:
+            self.h5 = h5py.File(filename, 'w') # Create or truncate file
+            self.h5_initialized = False
 
         self._worker_thread_queue = queue.Queue(2) # Create a 2 deep work queue
         self.worker_thread = threading.Thread(target=self._worker_thread_run)
