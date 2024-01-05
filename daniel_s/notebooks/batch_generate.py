@@ -57,10 +57,20 @@ def prepare_one(pdbid, data_dir=None):
         finished_file.write(finished_str)
     print(" ", finished_str)
 
-def simulate_one(pdbid, data_dir=None, steps=10000, report_steps=1, force=False):
+def simulate_one(pdbid, data_dir=None, steps=10000, report_steps=1, force=False, timeout=None):
+    interrupt_callback = None
+    if timeout:
+        interrupt_callback = lambda timeout=timeout : timeout > time.time()
+        if not interrupt_callback():
+            print("Canceled", pdbid, "(timeout)")
+            return
+
     if data_dir:
         function.set_data_dir(data_dir)
+
     finished_file_path = function.get_data_path(f'{pdbid}/simulation/finished.txt')
+    continue_file_path = function.get_data_path(f'{pdbid}/simulation/continue.txt')
+
     if os.path.exists(finished_file_path):
         if force:
             os.remove(finished_file_path)
@@ -68,10 +78,17 @@ def simulate_one(pdbid, data_dir=None, steps=10000, report_steps=1, force=False)
             print("Skipping", pdbid, "(already finished)")
             return
 
+    should_continue = False
+    action_name = "Simulating"
+    if os.path.exists(continue_file_path):
+        os.remove(continue_file_path)
+        should_continue = True
+        action_name = "Continuing"
+
     if "CUDA_VISIBLE_DEVICES" in os.environ:
-        print("Simulating", pdbid, "on gpu", os.environ["CUDA_VISIBLE_DEVICES"])
+        print(action_name, pdbid, "on gpu", os.environ["CUDA_VISIBLE_DEVICES"])
     else:
-        print("Simulating", pdbid)
+        print(action_name, pdbid)
 
     t0 = time.time()
     ok = True
@@ -79,16 +96,31 @@ def simulate_one(pdbid, data_dir=None, steps=10000, report_steps=1, force=False)
         try:
             pdb_path = function.get_data_path(f'{pdbid}/processed/{pdbid}_processed.pdb')
             atom_indices = function.get_non_water_atom_indexes(PDBFile(pdb_path).getTopology())
-            simulation.run(pdbid, pdb_path, steps, report_steps=report_steps, atomSubset=atom_indices)
+            steps_run = simulation.run(pdbid, pdb_path, steps, report_steps=report_steps, atomSubset=atom_indices,
+                                       resume_checkpoint=should_continue, interrupt_callback=interrupt_callback)
         except Exception as e:
             ok = False
             traceback.print_tb(e.__traceback__)
-    with open(function.get_data_path(f'{pdbid}/simulation/{pdbid}_simulation.log'),"wb") as f:
-        f.write(str(log).encode("utf-8"))
+
+    simulation_log_path = function.get_data_path(f'{pdbid}/simulation/{pdbid}_simulation.log')
+    simulation_log_mode = "w"
+    if should_continue:
+        simulation_log_mode = "a"
+
+    with open(simulation_log_path, simulation_log_mode, encoding="utf-8") as f:
+        f.write(str(log))
+
     t1 = time.time() - t0
-    finished_str = f"{pdbid} {('error', 'ok')[int(ok)]} ({round(t1,4)} seconds)"
-    with open(finished_file_path, "w", encoding="utf-8") as finished_file:
-        finished_file.write(finished_str)
+    if ok and steps_run != steps:
+        # If fewer than the requested number of steps ran but there was no exception then
+        # the simulation was gracefully interrupted and we can continue it later.
+        finished_str = f"{pdbid} interrupted ({round(t1,4)} seconds)"
+        with open(continue_file_path, "w", encoding="utf-8") as continue_file:
+            continue_file.write(f"{steps_run}")
+    else:
+        finished_str = f"{pdbid} {('error', 'ok')[int(ok)]} ({round(t1,4)} seconds)"
+        with open(finished_file_path, "w", encoding="utf-8") as finished_file:
+            finished_file.write(finished_str)
     print(" ", finished_str)
 
 def init_on_gpu(gpu_list, counter):
@@ -113,6 +145,7 @@ def main():
     parser.add_argument("--report-steps", default=1, type=int, help="Save data every n-frames")
     parser.add_argument("--data-dir", default="../data/", type=str)
     parser.add_argument("--gpus", default=None, type=str, help="A comma delimited lists of GPUs to use e.g. '0,1,2,3'")
+    parser.add_argument("--timeout", default=None, type=float, help="The maximum time to run in hours (e.g. 0.5 = 30 minutes)")
 
     args = parser.parse_args()
     print(args)
@@ -142,12 +175,17 @@ def main():
         init_args = (gpu_list, multiprocessing.Value('i', 0, lock=True))
         init_function = init_on_gpu
 
+    if args.timeout:
+        timeout = args.timeout * 3600 + time.time()
+    else:
+        timeout = None
+
     t0 = time.time()
     with multiprocessing.Pool(args.pool_size, initializer=init_function, initargs=init_args) as pool:
         pending_results = []
         for pdbid in batch_pdbid_list:
             pending_results += [pool.apply_async(simulate_one,
-                                                 (pdbid, args.data_dir, args.steps, args.report_steps, args.force))]
+                                                 (pdbid, args.data_dir, args.steps, args.report_steps, args.force, timeout))]
         
         while pending_results:
             pending_results = [i for i in pending_results if not i.ready()]
