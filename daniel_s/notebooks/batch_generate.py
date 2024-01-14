@@ -101,6 +101,7 @@ def simulate_one(pdbid, data_dir=None, steps=10000, report_steps=1, force=False,
         except Exception as e:
             ok = False
             traceback.print_tb(e.__traceback__)
+            print(e)
 
     simulation_log_path = function.get_data_path(f'{pdbid}/simulation/{pdbid}_simulation.log')
     simulation_log_mode = "w"
