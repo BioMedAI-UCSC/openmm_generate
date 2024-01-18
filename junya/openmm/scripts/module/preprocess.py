@@ -100,3 +100,13 @@ def prepare_protein(pdbid=str, remove_ligands=False):
     top = modeller.getTopology()
     pos = modeller.getPositions()
     app.PDBFile.writeFile(top, pos, open(function.get_data_path(f'{pdbid}/processed/{pdbid}_processed.pdb'), 'w'))
+
+    # Validate that the PDB file contains the correct structure
+    pdb = app.PDBFile(function.get_data_path(f'{pdbid}/processed/{pdbid}_processed.pdb'))
+    assert pdb.topology.getNumResidues() == top.getNumResidues()
+    assert pdb.topology.getNumAtoms() == top.getNumAtoms()
+    assert pdb.topology.getNumBonds() == top.getNumBonds()
+
+    top_bonds = [len([*i.bonds()]) for i in top.residues() if i.name == 'UNK']
+    pdb_bonds = [len([*i.bonds()]) for i in pdb.topology.residues() if i.name == 'UNK']
+    assert pdb_bonds == top_bonds
