@@ -58,6 +58,10 @@ def prepare_protein(pdbid=str, remove_ligands=False):
         chain = chains[key[0]]
         assert key[1] != 0 or key[1] != len(list(chain.residues())), "Terminal residues are not removed."
 
+    # remove ligand molecules if requested
+    if remove_ligands:
+        fixer.removeHeterogens(True)
+
     # find nonstandard residues
     fixer.findNonstandardResidues()
     fixer.replaceNonstandardResidues()
@@ -74,7 +78,10 @@ def prepare_protein(pdbid=str, remove_ligands=False):
     modeller = app.Modeller(fixer.topology, fixer.positions)
 
     # add ligands back to the prepaired protein
-    small_molecules = ligands.replace_ligands(pdb_path, modeller, remove_ligands=remove_ligands)
+    if remove_ligands:
+        small_molecules = None
+    else:
+        small_molecules = ligands.replace_ligands(pdb_path, modeller, remove_ligands=False)
 
     print("\nAfter the process")
     print(f"Missing residues: {fixer.missingResidues}")
