@@ -34,30 +34,51 @@ class RedirectOutputs:
     def __str__(self):
         return self._string_io.getvalue()
 
-def prepare_one(pdbid, data_dir=None):
+def prepare_one(pdbid, data_dir=None, force=False):
     if data_dir:
         function.set_data_dir(data_dir)
-    if os.path.exists(function.get_data_path(f'{pdbid}/processed/finished.txt')):
-        return
+
+    finished_file_path = function.get_data_path(f'{pdbid}/processed/finished.txt')
+
+    if os.path.exists(finished_file_path):
+        if force:
+            os.remove(finished_file_path)
+        else:
+            print("Skipping prepare", pdbid, "(already prepared)")
+            return
+
     print("Processing", pdbid)
 
     t0 = time.time()
     ok = True
     with RedirectOutputs() as log:
+        old_openmp_value = os.environ.get("OMP_NUM_THREADS", None)
         try:
+            # The sqm program used by OpenMM to parameterize ligans makes very inefficient use of threads
+            os.environ["OMP_NUM_THREADS"]="2"
             preprocess.prepare_protein(pdbid)
         except Exception as e:
             ok = False
+            traceback.print_tb(e.__traceback__)
             print(e)
+        finally:
+            if old_openmp_value:
+                os.environ["OMP_NUM_THREADS"]=old_openmp_value
+            else:
+                del os.environ["OMP_NUM_THREADS"]
+
     with open(function.get_data_path(f'{pdbid}/processed/{pdbid}_process.log'),"wb") as f:
         f.write(str(log).encode("utf-8"))
+
     t1 = time.time() - t0
     finished_str = f"{pdbid} {('error', 'ok')[int(ok)]} ({round(t1,4)} seconds)"
+
     with open(function.get_data_path(f'{pdbid}/processed/finished.txt'), "w", encoding="utf-8") as finished_file:
         finished_file.write(finished_str)
     print(" ", finished_str)
 
-def simulate_one(pdbid, data_dir=None, steps=10000, report_steps=1, force=False, timeout=None):
+def simulate_one(pdbid, data_dir=None, steps=10000, report_steps=1, prepare=False, force=False, timeout=None):
+    # print("simulate_one:", pdbid, data_dir, steps, report_steps, prepare, force, timeout)
     interrupt_callback = None
     if timeout:
         interrupt_callback = lambda timeout=timeout : timeout > time.time()
@@ -67,6 +88,10 @@ def simulate_one(pdbid, data_dir=None, steps=10000, report_steps=1, force=False,
 
     if data_dir:
         function.set_data_dir(data_dir)
+
+    if prepare:
+        #TODO: Split force prepare / force simulate into separate flags?
+        prepare_one(pdbid, data_dir, force)
 
     finished_file_path = function.get_data_path(f'{pdbid}/simulation/finished.txt')
     continue_file_path = function.get_data_path(f'{pdbid}/simulation/continue.txt')
@@ -108,8 +133,12 @@ def simulate_one(pdbid, data_dir=None, steps=10000, report_steps=1, force=False,
     if should_continue:
         simulation_log_mode = "a"
 
-    with open(simulation_log_path, simulation_log_mode, encoding="utf-8") as f:
-        f.write(str(log))
+    try:
+        with open(simulation_log_path, simulation_log_mode, encoding="utf-8") as f:
+            f.write(str(log))
+    except Exception as e:
+        print("!!! Failed to write log:", e)
+        print(log)
 
     t1 = time.time() - t0
     if ok and steps_run != steps:
@@ -140,7 +169,8 @@ def main():
     parser.add_argument("pdbid_list", type=str, help="A json file containing an array of PDB ids to process")
     parser.add_argument("--batch-index", required=True, type=int)
     parser.add_argument("--batch-size", required=True, type=int)
-    parser.add_argument("-f", "--force", action='store_true')
+    parser.add_argument("-f", "--force", action='store_true', help="Force simulate (and prepare if enabled) to run even the requested pdbids have already finished")
+    parser.add_argument("--prepare", action='store_true', help="Run prepare if the system has not already been set up")
     parser.add_argument("--pool-size", default=10, type=int, help="Number of simultaneous simulations to run")
     parser.add_argument("--steps", default=10000, type=int, help="Total number of steps to run")
     parser.add_argument("--report-steps", default=1, type=int, help="Save data every n-frames")
@@ -186,7 +216,9 @@ def main():
         pending_results = []
         for pdbid in batch_pdbid_list:
             pending_results += [pool.apply_async(simulate_one,
-                                                 (pdbid, args.data_dir, args.steps, args.report_steps, args.force, timeout))]
+                                                 (pdbid,), {"data_dir":args.data_dir, "steps":args.steps,
+                                                            "report_steps":args.report_steps, "prepare":args.prepare,
+                                                            "force":args.force, "timeout":timeout})]
         
         while pending_results:
             pending_results = [i for i in pending_results if not i.ready()]
