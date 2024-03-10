@@ -9,6 +9,7 @@ from module import function
 from module import preprocess
 from module import simulation
 from openmm.app import PDBFile
+import openff.units
 
 # Log capture
 # From https://stackoverflow.com/questions/1218933/can-i-redirect-the-stdout-into-some-sort-of-string-buffer
@@ -33,6 +34,36 @@ class RedirectOutputs:
 
     def __str__(self):
         return self._string_io.getvalue()
+
+def parse_integrator_params(integrator_params):
+    # Parse the integrator params dict into apropreate units
+    result = dict()
+    # Convert entries in the form "1*atm" or "1/picosecond" into OpenMM quantities
+    for k,v in integrator_params.items():
+        # Pretend numbers are strings
+        v = str(v)
+        # Split on the first math operator, either * or /
+        value_mul = v.split("*",1)
+        value_div = v.split("/",1)
+
+        def to_number(value):
+            if "." in value:
+                return float(value)
+            else:
+                return int(value)
+
+        if len(value_mul[0]) < len(value_div[0]):
+            value, units = value_mul
+            value = to_number(value)
+            value *= openff.units.openmm.string_to_openmm_unit(units)
+        elif len(value_div) == 2:
+            value, units = value_div
+            value = to_number(value)
+            value /= openff.units.openmm.string_to_openmm_unit(units)
+        else: # No units
+            value = to_number(value)
+        result[k] = value
+    return result
 
 def prepare_one(pdbid, data_dir=None, force=False):
     if data_dir:
@@ -77,7 +108,8 @@ def prepare_one(pdbid, data_dir=None, force=False):
         finished_file.write(finished_str)
     print(" ", finished_str)
 
-def simulate_one(pdbid, data_dir=None, steps=10000, report_steps=1, prepare=False, force=False, timeout=None):
+def simulate_one(pdbid, data_dir=None, steps=10000, report_steps=1, prepare=False, force=False, timeout=None,
+                 integrator_params=None):
     # print("simulate_one:", pdbid, data_dir, steps, report_steps, prepare, force, timeout)
     interrupt_callback = None
     if timeout:
@@ -122,7 +154,8 @@ def simulate_one(pdbid, data_dir=None, steps=10000, report_steps=1, prepare=Fals
             pdb_path = function.get_data_path(f'{pdbid}/processed/{pdbid}_processed.pdb')
             atom_indices = function.get_non_water_atom_indexes(PDBFile(pdb_path).getTopology())
             steps_run = simulation.run(pdbid, pdb_path, steps, report_steps=report_steps, atomSubset=atom_indices,
-                                       resume_checkpoint=should_continue, interrupt_callback=interrupt_callback)
+                                       resume_checkpoint=should_continue, interrupt_callback=interrupt_callback,
+                                       integrator_params=integrator_params)
         except Exception as e:
             ok = False
             traceback.print_tb(e.__traceback__)
@@ -177,6 +210,7 @@ def main():
     parser.add_argument("--data-dir", default="../data/", type=str)
     parser.add_argument("--gpus", default=None, type=str, help="A comma delimited lists of GPUs to use e.g. '0,1,2,3'")
     parser.add_argument("--timeout", default=None, type=float, help="The maximum time to run in hours (e.g. 0.5 = 30 minutes)")
+    parser.add_argument("--integrator", default=None, type=str, help="A json file specifying the integrator parameters")
 
     args = parser.parse_args()
     print(args)
@@ -188,6 +222,13 @@ def main():
     # if args.batch_size is None or args.batch_index is None:
     #     print("Batch size and index must both be set.")
     #     parser.print_usage()
+
+    if args.integrator:
+        with open(args.integrator, "r") as f:
+            integrator_params = json.load(f)
+        integrator_params = parse_integrator_params(integrator_params)
+    else:
+        integrator_params = None
 
     try:
         multiprocessing.set_start_method('spawn') # because NERSC says to use this one?
@@ -215,10 +256,12 @@ def main():
     with multiprocessing.Pool(args.pool_size, initializer=init_function, initargs=init_args) as pool:
         pending_results = []
         for pdbid in batch_pdbid_list:
+            kwargs_dict = {"data_dir":args.data_dir, "steps":args.steps,
+                           "report_steps":args.report_steps, "prepare":args.prepare,
+                           "force":args.force, "timeout":timeout,
+                           "integrator_params":integrator_params}
             pending_results += [pool.apply_async(simulate_one,
-                                                 (pdbid,), {"data_dir":args.data_dir, "steps":args.steps,
-                                                            "report_steps":args.report_steps, "prepare":args.prepare,
-                                                            "force":args.force, "timeout":timeout})]
+                                                 (pdbid,), kwargs_dict)]
         
         while pending_results:
             pending_results = [i for i in pending_results if not i.ready()]
