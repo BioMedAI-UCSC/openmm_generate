@@ -200,8 +200,8 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("pdbid_list", type=str, help="A json file containing an array of PDB ids to process")
-    parser.add_argument("--batch-index", required=True, type=int)
-    parser.add_argument("--batch-size", required=True, type=int)
+    parser.add_argument("--batch-size", default=None, type=int, help="Split pdbid_list into batches of this zie")
+    parser.add_argument("--batch-index", default=0, type=int, help="If splitting into batches, select which batch to run")
     parser.add_argument("-f", "--force", action='store_true', help="Force simulate (and prepare if enabled) to run even the requested pdbids have already finished")
     parser.add_argument("--prepare", action='store_true', help="Run prepare if the system has not already been set up")
     parser.add_argument("--pool-size", default=10, type=int, help="Number of simultaneous simulations to run")
@@ -219,10 +219,6 @@ def main():
         print("Invalid data directory:", args.data_dir)
         return 1
 
-    # if args.batch_size is None or args.batch_index is None:
-    #     print("Batch size and index must both be set.")
-    #     parser.print_usage()
-
     if args.integrator:
         with open(args.integrator, "r") as f:
             integrator_params = json.load(f)
@@ -237,7 +233,12 @@ def main():
 
     with open(args.pdbid_list,"r") as f:
         pdbid_list = json.load(f)
-    batch_pdbid_list = pdbid_list[args.batch_index*args.batch_size:(args.batch_index+1)*args.batch_size]
+
+    if args.batch_size:
+        batch_pdbid_list = pdbid_list[args.batch_index*args.batch_size:(args.batch_index+1)*args.batch_size]
+    else:
+        batch_pdbid_list = pdbid_list
+
     print(batch_pdbid_list)
 
     init_function = None
