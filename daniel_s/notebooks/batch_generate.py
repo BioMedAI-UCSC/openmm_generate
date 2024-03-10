@@ -65,7 +65,7 @@ def parse_integrator_params(integrator_params):
         result[k] = value
     return result
 
-def prepare_one(pdbid, data_dir=None, force=False):
+def prepare_one(pdbid, data_dir=None, force=False, remove_ligands=False):
     if data_dir:
         function.set_data_dir(data_dir)
 
@@ -87,7 +87,7 @@ def prepare_one(pdbid, data_dir=None, force=False):
         try:
             # The sqm program used by OpenMM to parameterize ligans makes very inefficient use of threads
             os.environ["OMP_NUM_THREADS"]="2"
-            preprocess.prepare_protein(pdbid)
+            preprocess.prepare_protein(pdbid, remove_ligands=remove_ligands)
         except Exception as e:
             ok = False
             traceback.print_tb(e.__traceback__)
@@ -108,8 +108,8 @@ def prepare_one(pdbid, data_dir=None, force=False):
         finished_file.write(finished_str)
     print(" ", finished_str)
 
-def simulate_one(pdbid, data_dir=None, steps=10000, report_steps=1, prepare=False, force=False, timeout=None,
-                 integrator_params=None):
+def simulate_one(pdbid, data_dir=None, steps=10000, report_steps=1, prepare=False, remove_ligands=False,
+                 force=False, timeout=None, integrator_params=None):
     # print("simulate_one:", pdbid, data_dir, steps, report_steps, prepare, force, timeout)
     interrupt_callback = None
     if timeout:
@@ -123,7 +123,7 @@ def simulate_one(pdbid, data_dir=None, steps=10000, report_steps=1, prepare=Fals
 
     if prepare:
         #TODO: Split force prepare / force simulate into separate flags?
-        prepare_one(pdbid, data_dir, force)
+        prepare_one(pdbid, data_dir, force, remove_ligands=remove_ligands)
 
     finished_file_path = function.get_data_path(f'{pdbid}/simulation/finished.txt')
     continue_file_path = function.get_data_path(f'{pdbid}/simulation/continue.txt')
@@ -204,13 +204,14 @@ def main():
     parser.add_argument("--batch-index", default=0, type=int, help="If splitting into batches, select which batch to run")
     parser.add_argument("-f", "--force", action='store_true', help="Force simulate (and prepare if enabled) to run even the requested pdbids have already finished")
     parser.add_argument("--prepare", action='store_true', help="Run prepare if the system has not already been set up")
+    parser.add_argument("--remove-ligands", action='store_true', help="Remove ligands instead of parameterizing in prepare")
+    parser.add_argument("--integrator", default=None, type=str, help="A json file specifying the integrator parameters")
     parser.add_argument("--pool-size", default=10, type=int, help="Number of simultaneous simulations to run")
     parser.add_argument("--steps", default=10000, type=int, help="Total number of steps to run")
     parser.add_argument("--report-steps", default=1, type=int, help="Save data every n-frames")
     parser.add_argument("--data-dir", default="../data/", type=str)
     parser.add_argument("--gpus", default=None, type=str, help="A comma delimited lists of GPUs to use e.g. '0,1,2,3'")
     parser.add_argument("--timeout", default=None, type=float, help="The maximum time to run in hours (e.g. 0.5 = 30 minutes)")
-    parser.add_argument("--integrator", default=None, type=str, help="A json file specifying the integrator parameters")
 
     args = parser.parse_args()
     print(args)
@@ -259,6 +260,7 @@ def main():
         for pdbid in batch_pdbid_list:
             kwargs_dict = {"data_dir":args.data_dir, "steps":args.steps,
                            "report_steps":args.report_steps, "prepare":args.prepare,
+                           "remove_ligands": args.remove_ligands,
                            "force":args.force, "timeout":timeout,
                            "integrator_params":integrator_params}
             pending_results += [pool.apply_async(simulate_one,
