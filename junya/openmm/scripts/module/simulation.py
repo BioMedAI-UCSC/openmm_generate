@@ -11,7 +11,7 @@ from module import function
 from module.reporters import ExtendedH5MDReporter
 
 def run(pdbid=str, input_pdb_path=str, steps=100, report_steps=1, load_ligand_smiles=True, atomSubset=None,
-        resume_checkpoint=False, interrupt_callback=None):
+        resume_checkpoint=False, interrupt_callback=None, integrator_params=None):
     """
     Run the simulation for the given PDB ID.
 
@@ -26,6 +26,8 @@ def run(pdbid=str, input_pdb_path=str, steps=100, report_steps=1, load_ligand_sm
             start a new simulatin.
         interrupt_callback (function): This function is called at every checkpoint interval (<1000 steps),
             if it returns false then the simmulation is gracefully stopped.
+        integrator_params (dict): A dict of integrator parameters to modify, possibile keys:
+            dt, temperature, friction, pressure, barostatInterval
 
     Returns:
         (int): The last step completed.
@@ -56,11 +58,13 @@ def run(pdbid=str, input_pdb_path=str, steps=100, report_steps=1, load_ligand_sm
     hydrogenMass = 1.5*amu
 
     # Integration Options
-    dt = 0.002*picoseconds
-    temperature = 300*kelvin
-    friction = 1.0/picosecond
-    pressure = 1.0*atmospheres
-    barostatInterval = 25
+    if integrator_params is None:
+        integrator_params = dict()
+    dt = integrator_params.get("dt", 0.002*picoseconds)
+    temperature = integrator_params.get("temperature", 300*kelvin)
+    friction = integrator_params.get("friction", 1.0/picosecond)
+    pressure = integrator_params.get("pressure", 1.0*atmospheres)
+    barostatInterval = integrator_params.get("barostatInterval", 25)
 
     # Simulation Options
     equilibrationSteps = 10
