@@ -5,6 +5,7 @@ import pdbfixer
 import requests
 import json
 import os
+import shutil
 from module import ligands
 from module import function
 
@@ -20,20 +21,31 @@ def prepare_protein(pdbid=str, remove_ligands=False):
     Returns:
         None
     """
+
+    local_input_pdb_path = None
+    if pdbid.endswith(".pdb"):
+        local_input_pdb_path = pdbid
+        pdbid = os.path.splitext(os.path.basename(local_input_pdb_path))[0]
+
     print(f"Preprocess of {pdbid}")
     # create folder
     function.create_folder(function.get_data_path(pdbid))
     pdb_path = function.get_data_path(f"{pdbid}/raw/{pdbid}.pdb")
-    pdb_url = f"https://files.rcsb.org/download/{pdbid}.pdb"
 
-    # download pdb file
-    if not os.path.exists(pdb_path):
-        r = requests.get(pdb_url)
-        r.raise_for_status()
-        with open(pdb_path, "wb") as f:
-            f.write(r.content)
+    if local_input_pdb_path:
+        print("Using local input:", local_input_pdb_path)
+        shutil.copyfile(local_input_pdb_path, pdb_path)
     else:
-        print(f"{pdbid}.pdb already downloaded")
+        pdb_url = f"https://files.rcsb.org/download/{pdbid}.pdb"
+
+        # download pdb file
+        if not os.path.exists(pdb_path):
+            r = requests.get(pdb_url)
+            r.raise_for_status()
+            with open(pdb_path, "wb") as f:
+                f.write(r.content)
+        else:
+            print(f"{pdbid}.pdb already downloaded")
 
     fixer = pdbfixer.PDBFixer(pdb_path)
 
