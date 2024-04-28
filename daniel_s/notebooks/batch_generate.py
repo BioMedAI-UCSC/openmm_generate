@@ -112,6 +112,8 @@ def prepare_one(pdbid, data_dir=None, input_dir=None, force=False, remove_ligand
         finished_file.write(finished_str)
     print(" ", finished_str)
 
+    return ok
+
 def simulate_one(pdbid, data_dir=None, input_dir=None, steps=10000, report_steps=1, prepare=False, remove_ligands=False,
                  force=False, timeout=None, integrator_params=None):
     # print("simulate_one:", pdbid, data_dir, steps, report_steps, prepare, force, timeout)
@@ -127,7 +129,8 @@ def simulate_one(pdbid, data_dir=None, input_dir=None, steps=10000, report_steps
 
     if prepare:
         #TODO: Split force prepare / force simulate into separate flags?
-        prepare_one(pdbid, data_dir, input_dir, force, remove_ligands=remove_ligands)
+        if not prepare_one(pdbid, data_dir, input_dir, force, remove_ligands=remove_ligands):
+            return
 
     finished_file_path = function.get_data_path(f'{pdbid}/simulation/finished.txt')
     continue_file_path = function.get_data_path(f'{pdbid}/simulation/continue.txt')
