@@ -15,6 +15,7 @@ import openff.units
 # From https://stackoverflow.com/questions/1218933/can-i-redirect-the-stdout-into-some-sort-of-string-buffer
 import sys
 from io import StringIO
+import glob
 
 class RedirectOutputs:
     def __init__(self):
@@ -206,7 +207,7 @@ def main():
     import multiprocessing
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("pdbid_list", type=str, help="A json file containing an array of PDB ids to process")
+    parser.add_argument("pdbid_list", type=str, nargs="*", help="The PDB ids to process, or .json file containing an array of PDB ids")
     parser.add_argument("--batch-size", default=None, type=int, help="Split pdbid_list into batches of this zie")
     parser.add_argument("--batch-index", default=0, type=int, help="If splitting into batches, select which batch to run")
     parser.add_argument("-f", "--force", action='store_true', help="Force simulate (and prepare if enabled) to run even the requested pdbids have already finished")
@@ -216,7 +217,7 @@ def main():
     parser.add_argument("--pool-size", default=10, type=int, help="Number of simultaneous simulations to run")
     parser.add_argument("--steps", default=10000, type=int, help="Total number of steps to run")
     parser.add_argument("--report-steps", default=1, type=int, help="Save data every n-frames")
-    parser.add_argument("--data-dir", default="../data/", type=str)
+    parser.add_argument("--data-dir", default="../data/", type=str, help="Output data directory")
     parser.add_argument("--input-dir", default=None, type=str, help="Input data directory, if set PDB files will be copied from here instead of download from RCSB")
     parser.add_argument("--gpus", default=None, type=str, help="A comma delimited lists of GPUs to use e.g. '0,1,2,3'")
     parser.add_argument("--timeout", default=None, type=float, help="The maximum time to run in hours (e.g. 0.5 = 30 minutes)")
@@ -225,8 +226,25 @@ def main():
     print(args)
 
     if not os.path.exists(args.data_dir):
-        print("Invalid data directory:", args.data_dir)
-        return 1
+        os.makedirs(os.path.realpath(args.data_dir), exist_ok=True)
+
+    pdbid_list = args.pdbid_list
+
+    if not pdbid_list:
+        if not args.input_dir:
+            print("Either an input directory of a list of pdbs must be given")
+            return 1
+        else:
+            pdbid_list = []
+            for i in glob.glob(os.path.join(args.input_dir, "*.pdb")):
+                pdbid_list.append(os.path.splitext(os.path.basename(i))[0])
+            if not pdbid_list:
+                print(f"Could not find any pdbs in \"{args.input_dir}\"")
+
+    if pdbid_list[0].endswith(".json"):
+        print("Taking inputs from list:", args.pdbid_list[0])
+        with open(args.pdbid_list[0], "r") as f:
+            pdbid_list = json.load(f)
 
     if args.integrator:
         with open(args.integrator, "r") as f:
@@ -239,9 +257,6 @@ def main():
         multiprocessing.set_start_method('spawn') # because NERSC says to use this one?
     except Exception as e:
         print("Multiprocessing:", e)
-
-    with open(args.pdbid_list,"r") as f:
-        pdbid_list = json.load(f)
 
     if args.batch_size:
         batch_pdbid_list = pdbid_list[args.batch_index*args.batch_size:(args.batch_index+1)*args.batch_size]
