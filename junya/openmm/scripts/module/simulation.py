@@ -67,7 +67,7 @@ def run(pdbid=str, input_pdb_path=str, steps=100, report_steps=1, load_ligand_sm
     barostatInterval = integrator_params.get("barostatInterval", 25)
 
     # Simulation Options
-    equilibrationSteps = 10
+    equilibrationSteps = int((10*picoseconds)/dt)
     checkpointInterval = min(int(steps/10), 1000)
     platformNames = [Platform.getPlatform(i).getName() for i in range(Platform.getNumPlatforms())]
     if 'CUDA' in platformNames:
