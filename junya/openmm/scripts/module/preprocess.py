@@ -10,7 +10,7 @@ from module import ligands
 from module import function
 
 
-def prepare_protein(pdbid=str, remove_ligands=False):
+def prepare_protein(pdbid=str, remove_ligands=False, implicit_solvent=False):
     """
     Preprocesses a protein by downloading the PDB file, fixing missing residues and atoms,
     adding missing hydrogens, adding solvent, and writing the processed PDB file.
@@ -101,19 +101,30 @@ def prepare_protein(pdbid=str, remove_ligands=False):
     print(f"Missing atoms: {fixer.missingAtoms}")
 
     # set the forcefield
-    forcefield = app.ForceField("amber14-all.xml", "amber14/tip3pfb.xml")
+    if implicit_solvent:
+        forcefield_configs = ["amber14-all.xml", "implicit/gbn2.xml"]
+    else:
+        forcefield_configs = ["amber14-all.xml", "amber14/tip3pfb.xml"]
+    json.dump(forcefield_configs, open(function.get_data_path(f'{pdbid}/processed/forcefield.json'), 'w', encoding='utf-8'))
+
+    forcefield = app.ForceField(*forcefield_configs)
+
     if small_molecules:
         json.dump(small_molecules, open(function.get_data_path(f'{pdbid}/processed/{pdbid}_processed_ligands_smiles.json'), 'w'))
         template_cache_path = function.get_data_path(f'{pdbid}/processed/{pdbid}_processed_ligands_cache.json')
         ligands.add_ff_template_generator_from_smiles(forcefield, small_molecules, cache_path=template_cache_path)
+
+    if implicit_solvent:
+        modeller.deleteWater()
 
     # Small molecules we've added templates for will be named "UNK"
     unmatched_residues = [r for r in forcefield.getUnmatchedResidues(modeller.topology) if r.name != "UNK"]
     if unmatched_residues:
         raise RuntimeError("Structure still contains unmatched residues after fixup: " + str(unmatched_residues))
 
-    # solvent model: tip3p. Default is NaCl
-    modeller.addSolvent(forcefield, padding=1.0 * unit.nanometers, ionicStrength=0.15 * unit.molar)
+    # Add the water molecules if we're using explicit solvent
+    if not implicit_solvent:
+        modeller.addSolvent(forcefield, padding=1.0 * unit.nanometers, ionicStrength=0.15 * unit.molar)
 
     # write the processed pdb file & ligand templates
     top = modeller.getTopology()

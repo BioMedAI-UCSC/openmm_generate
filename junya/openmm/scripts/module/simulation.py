@@ -5,6 +5,7 @@ import numpy as np
 import h5py
 import os
 import math
+import json
 from sys import stdout
 from module import ligands
 from module import function
@@ -38,7 +39,15 @@ def run(pdbid=str, input_pdb_path=str, steps=100, report_steps=1, load_ligand_sm
     
     # Input Files
     pdb = PDBFile(input_pdb_path)
-    forcefield = ForceField('amber14-all.xml', 'amber14/tip3pfb.xml')
+
+    ff_configs = ['amber14-all.xml', 'amber14/tip3pfb.xml']
+    ff_configs_path = function.get_data_path(f'{pdbid}/processed/forcefield.json')
+    if os.path.exists(ff_configs_path):
+        ff_configs = json.load(open(ff_configs_path, 'r', encoding='utf-8'))
+    print("Forcefield:", ff_configs)
+    implicit_solvent = any(["implicit" in i for i in ff_configs])
+
+    forcefield = ForceField(*ff_configs)
 
     if load_ligand_smiles:
         input_ligands_path = os.path.splitext(input_pdb_path)[0]+"_ligands_smiles.json"
@@ -65,6 +74,12 @@ def run(pdbid=str, input_pdb_path=str, steps=100, report_steps=1, load_ligand_sm
     friction = integrator_params.get("friction", 1.0/picosecond)
     pressure = integrator_params.get("pressure", 1.0*atmospheres)
     barostatInterval = integrator_params.get("barostatInterval", 25)
+
+    # Additional values for implicit solvent:
+    if implicit_solvent:
+        saltCon = 0.15 # unit.molar
+        solventDielectric = 78.5 # Default solvent dielectric: http://docs.openmm.org/latest/userguide/application/02_running_sims.html @ 2024.02.11
+        implicitSolventKappa = 7.3*50.33355*math.sqrt(saltCon/solventDielectric/temperature.value_in_unit(kelvin))*(1/nanometer)
 
     # Simulation Options
     equilibrationSteps = int((10*picoseconds)/dt)
@@ -100,9 +115,13 @@ def run(pdbid=str, input_pdb_path=str, steps=100, report_steps=1, load_ligand_sm
 
         if not resume_checkpoint:
             print('Building system...')
-            system = forcefield.createSystem(topology, nonbondedMethod=nonbondedMethod, nonbondedCutoff=nonbondedCutoff,
-                constraints=constraints, rigidWater=rigidWater, ewaldErrorTolerance=ewaldErrorTolerance, hydrogenMass=hydrogenMass)
-            system.addForce(MonteCarloBarostat(pressure, temperature, barostatInterval))
+            if implicit_solvent:
+                system = forcefield.createSystem(topology, nonbondedMethod=NoCutoff, constraints=constraints, hydrogenMass=hydrogenMass,
+                                                 implicitSolventKappa=implicitSolventKappa)
+            else:
+                system = forcefield.createSystem(topology, nonbondedMethod=nonbondedMethod, nonbondedCutoff=nonbondedCutoff,
+                    constraints=constraints, rigidWater=rigidWater, ewaldErrorTolerance=ewaldErrorTolerance, hydrogenMass=hydrogenMass)
+                system.addForce(MonteCarloBarostat(pressure, temperature, barostatInterval))
             integrator = LangevinMiddleIntegrator(temperature, friction, dt)
             integrator.setConstraintTolerance(constraintTolerance)
             simulation = Simulation(topology, system, integrator, platform, platformProperties)

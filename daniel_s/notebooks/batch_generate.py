@@ -66,12 +66,13 @@ def parse_integrator_params(integrator_params):
         result[k] = value
     return result
 
-def prepare_one(pdbid, data_dir=None, input_dir=None, force=False, remove_ligands=False):
+def prepare_one(pdbid, data_dir=None, input_dir=None, force=False, remove_ligands=False, implicit_solvent=False):
     if data_dir:
         function.set_data_dir(data_dir)
 
     finished_file_path = function.get_data_path(f'{pdbid}/processed/finished.txt')
 
+    # FIXME: Should this also check if implicit_solvent has changed?
     if os.path.exists(finished_file_path):
         if force:
             os.remove(finished_file_path)
@@ -92,7 +93,7 @@ def prepare_one(pdbid, data_dir=None, input_dir=None, force=False, remove_ligand
                 prepare_input = os.path.join(input_dir, pdbid + ".pdb")
             else:
                 prepare_input = pdbid
-            preprocess.prepare_protein(prepare_input, remove_ligands=remove_ligands)
+            preprocess.prepare_protein(prepare_input, remove_ligands=remove_ligands, implicit_solvent=implicit_solvent)
         except Exception as e:
             ok = False
             traceback.print_tb(e.__traceback__)
@@ -116,7 +117,7 @@ def prepare_one(pdbid, data_dir=None, input_dir=None, force=False, remove_ligand
     return ok
 
 def simulate_one(pdbid, data_dir=None, input_dir=None, steps=10000, report_steps=1, prepare=False, remove_ligands=False,
-                 force=False, timeout=None, integrator_params=None):
+                 prepare_implicit=False, force=False, timeout=None, integrator_params=None):
     # print("simulate_one:", pdbid, data_dir, steps, report_steps, prepare, force, timeout)
     interrupt_callback = None
     if timeout:
@@ -130,7 +131,7 @@ def simulate_one(pdbid, data_dir=None, input_dir=None, steps=10000, report_steps
 
     if prepare:
         #TODO: Split force prepare / force simulate into separate flags?
-        if not prepare_one(pdbid, data_dir, input_dir, force, remove_ligands=remove_ligands):
+        if not prepare_one(pdbid, data_dir, input_dir, force, remove_ligands=remove_ligands, implicit_solvent=prepare_implicit):
             return
 
     finished_file_path = function.get_data_path(f'{pdbid}/simulation/finished.txt')
@@ -212,6 +213,7 @@ def main():
     parser.add_argument("--batch-index", default=0, type=int, help="If splitting into batches, select which batch to run")
     parser.add_argument("-f", "--force", action='store_true', help="Force simulate (and prepare if enabled) to run even the requested pdbids have already finished")
     parser.add_argument("--prepare", action='store_true', help="Run prepare if the system has not already been set up")
+    parser.add_argument("--prepare-implicit", action='store_true', help="Run prepare with an implicit solvent model if the system has not already been set up")
     parser.add_argument("--remove-ligands", action='store_true', help="Remove ligands instead of parameterizing in prepare")
     parser.add_argument("--integrator", default=None, type=str, help="A json file specifying the integrator parameters")
     parser.add_argument("--pool-size", default=10, type=int, help="Number of simultaneous simulations to run")
@@ -240,11 +242,15 @@ def main():
                 pdbid_list.append(os.path.splitext(os.path.basename(i))[0])
             if not pdbid_list:
                 print(f"Could not find any pdbs in \"{args.input_dir}\"")
+                return 1
 
     if pdbid_list[0].endswith(".json"):
         print("Taking inputs from list:", args.pdbid_list[0])
         with open(args.pdbid_list[0], "r") as f:
             pdbid_list = json.load(f)
+
+    if args.prepare_implicit:
+        args.prepare = True
 
     if args.integrator:
         with open(args.integrator, "r") as f:
@@ -283,6 +289,7 @@ def main():
         for pdbid in batch_pdbid_list:
             kwargs_dict = {"data_dir":args.data_dir, "input_dir":args.input_dir, "steps":args.steps,
                            "report_steps":args.report_steps, "prepare":args.prepare,
+                           "prepare_implicit":args.prepare_implicit,
                            "remove_ligands": args.remove_ligands,
                            "force":args.force, "timeout":timeout,
                            "integrator_params":integrator_params}
