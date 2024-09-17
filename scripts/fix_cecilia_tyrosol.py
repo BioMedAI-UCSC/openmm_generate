@@ -5,6 +5,10 @@ import re
 import glob
 import os
 
+# openmm templates fail to match cecilia pdb files since they used charmm
+# https://github.com/torchmd/torchmd-protein-thermodynamics/tree/main/Datasets
+# remove ivalid atoms on Tyrosine so it can match it
+
 def fix_TYR(input_path: str, output_path: str):
     traj = mdtraj.load(input_path, standard_names=False)
 
