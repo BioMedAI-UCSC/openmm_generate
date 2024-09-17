@@ -1,5 +1,3 @@
-from random import randrange
-import scipy
 import glob
 import deeptime
 import mdtraj
@@ -7,110 +5,107 @@ from numpy.typing import NDArray
 import numpy as np
 import itertools
 from matplotlib import pyplot as plt
-import sys
 import os
-import json
-import tempfile
-
-sys.path.insert(0, "/home/andy/cgschnet/cgschnet/scripts/")#to import preproccess.py
-prior_params = json.load(open(os.path.join("/home/andy/cgschnet/cgschnet/data/result-2024.08.21-10.16.28/", "prior_params.json"), "r"))
 
 NUM_STARTING = 100000000
+DIST_THRESH = 0.0001
 
 def make_tica_model(bond_lens):
     lagtime=20
     estimator = deeptime.decomposition.TICA(lagtime=lagtime, dim=None)
     
     bond_lens = [x for x in bond_lens if (x.shape[0] > lagtime)]
-
-    for X, Y in deeptime.util.data.timeshifted_split(bond_lens, lagtime=lagtime):
+    print("fitting tica model")
+    for i, (X, Y) in enumerate(deeptime.util.data.timeshifted_split(bond_lens, lagtime=lagtime)):
+        print(f"fitted {i}/{len(bond_lens)} trajectories")
         estimator.partial_fit((X, Y))
     model_onedim = estimator.fetch_model()
+    print("done fitting tica model")
     return model_onedim
 
-def get_bonds(traj: mdtraj.Trajectory) -> list[tuple[int, int]]:
-    return list(map(lambda x: (x[0].index, x[1].index), traj.topology.bonds))
+def get_bonds(top: mdtraj.Topology) -> list[tuple[int, int]]:
+    return list(map(lambda x: (x[0].index, x[1].index), top.bonds))
 
-def calc_bond_lens(traj: mdtraj.Trajectory) -> NDArray:
-    bonds = get_bonds(traj)
-
-    pairs = itertools.combinations(range(0, traj.n_atoms), 2) if(len(bonds) == 0) else bonds
-    pairs = list(pairs)
+def calc_bond_lens(traj: mdtraj.Trajectory, pairs: list[tuple[int, int]]) -> NDArray:
     distances: NDArray = mdtraj.compute_distances(traj, pairs)
     return distances
 
-def make_plot(trajs: list[mdtraj.Trajectory]):
-    bond_lens = list(map(lambda x: calc_bond_lens(x), trajs))
+def make_starting_pos(top: mdtraj.Topology, trajs: list[mdtraj.Trajectory], do_plot=False):
+    print("calculating bond lens")
+
+    bonds = get_bonds(top)
+    pairs = list(itertools.combinations(range(0, trajs[0].n_atoms), 2) if(len(bonds) == 0) else bonds)
+    bond_lens = list(map(lambda x: calc_bond_lens(x, pairs), trajs))
+    print("done calculating bond lens")
     tica_model = make_tica_model(bond_lens)
     projected_datas = list(map(lambda x: tica_model.transform(x), bond_lens))
-    fig, axs = plt.subplots(nrows=1, ncols=1, squeeze=False, tight_layout=True)
-    axs[0][0].set_xlabel("TICA 0th component")
-    axs[0][0].set_ylabel("TICA 1st component")
-
-    datas = np.concatenate(projected_datas).transpose()[:2, :]
-    
-    for i, projected_data in enumerate(projected_datas):
-        num_show = min(projected_data.shape[0], NUM_STARTING)
-        axs[0][0].scatter(projected_data[:num_show, 0], projected_data[:num_show, 1], s=2, c="blue")
 
     datas = np.concatenate(projected_datas)[:, :2]
-    print(datas.shape)
+    datas_index = np.concatenate(
+        [np.array(
+            [np.repeat([traj_num], traj.n_frames), np.arange(traj.n_frames)]).transpose()
+         for traj_num, traj in enumerate(trajs)])
+    assert(datas_index.shape[0] == datas.shape[0])
     starting_positions = []
 
     while len(datas) > 0:
-        print("len =", len(starting_positions), "remaining", len(datas))
-        index = randrange(len(datas))
-        point = datas[index]
+        
+        print(f"found {len(starting_positions)} points, remaining {len(datas)} points")
+        choose_index = 0 #choose some random index
+        point = datas[choose_index]
         def dist_squared(p1, p2):
             return ((p1[0] - p2[0])**2) + ((p1[1] - p2[1])**2)
 
-        DIST_THRESH = 0.000001
-        
-        starting_positions.append(point)
+        starting_positions.append((point, datas_index[choose_index]))
         to_remove = []
         for i, a in enumerate(datas):
             if dist_squared(a, point) <= DIST_THRESH:
                 to_remove.append(i)
         datas = np.delete(datas, to_remove, axis=0)
+        datas_index = np.delete(datas_index, to_remove, axis=0)
+        assert(datas_index.shape[0] == datas.shape[0])
 
+    starting_positions_pos = np.array(list(map(lambda x: x[0], starting_positions)))
+    if do_plot:
+        fig, axs = plt.subplots(nrows=1, ncols=1, squeeze=False, tight_layout=True)
+        axs[0][0].set_xlabel("TICA 0th component")
+        axs[0][0].set_ylabel("TICA 1st component")
 
-    starting_positions = np.array(starting_positions)
-    axs[0][0].scatter(starting_positions[:, 0], starting_positions[:, 1], s=2, c="red")
+        for i, projected_data in enumerate(projected_datas):
+            num_show = min(projected_data.shape[0], NUM_STARTING)
+            axs[0][0].scatter(projected_data[:num_show, 0], projected_data[:num_show, 1], s=2, c="blue")
+            axs[0][0].scatter(starting_positions_pos[:, 0], starting_positions_pos[:, 1], s=2, c="red")
     
-    
-    fig.savefig("poo.png", format='png')
-
-def load_native_trajs(native_trajs_dir: str) -> list[mdtraj.Trajectory]:
-    import preprocess
-    prior_name = prior_params["prior_configuration_name"]
-    prior_builder = preprocess.prior_types[prior_name]()
-    top = os.path.join(native_trajs_dir, "extract/filtered/filtered.pdb")
-    mol = prior_builder.write_psf(top, None)
-
-    with tempfile.TemporaryDirectory() as tmpdirname:
-        topology_path = os.path.join(tmpdirname, "topology.pdb")
-        mol.write(topology_path)
-        topology = mdtraj.load(topology_path).top
-        atoms_idx = prior_builder.select_atoms(topology)
+        fig.savefig("test.png", format='png')
+        plt.close()
         
-        paths = glob.glob(os.path.join(native_trajs_dir, "extract/filtered/*/*.xtc"))# [:100]
-        trajs = list(map(lambda p: load_native_path(p, atoms_idx, topology, top), paths))
-        return trajs
+    print(f"saving {len(starting_positions)} starting positions")
+    for i, (traj_num, frame_num) in enumerate(map(lambda x: x[1], starting_positions)):
+        frame = trajs[traj_num][frame_num]
+        assert frame.xyz.shape[0] == 1
+        traj = mdtraj.Trajectory(frame.xyz, top)
+        traj.save(f"output/starting_pos_{i}.pdb")
 
-def load_native_path(native_path: str, atoms_idx, topology, pdb) -> mdtraj.Trajectory:
-    out = apply_cg(mdtraj.load_xtc(native_path, top=pdb), atoms_idx)
-    out.top = topology
+def load_native_trajs(native_trajs_dir: str) -> tuple[mdtraj.Topology, list[mdtraj.Trajectory]]:
+    paths = glob.glob(os.path.join(native_trajs_dir, "extract/filtered/*/*.xtc"))
+    print(f"loading {len(paths)} trajectories")
+    top = os.path.join(native_trajs_dir, "extract/filtered/filtered.pdb")
+    
+    trajs = list(map(lambda p: load_native_path(p, top), paths))
+
+    topology = mdtraj.load(top).top
+
+    print("done loading trajectories")
+    return topology, trajs
+
+def load_native_path(native_path: str, pdb) -> mdtraj.Trajectory:
+    out = mdtraj.load_xtc(native_path, top=pdb)
     return out
-
-def apply_cg(traj, atom_indicies):
-    new_traj = traj.atom_slice(atom_indicies)
-    assert new_traj.n_atoms == len(atom_indicies)
-    return new_traj
 
 
 def main():
-    thing = load_native_trajs("/media/DATA_18_TB_2/andy/benchmark_set_2/trajectory_datas/chignolin")
-    make_plot(thing)
+    top, paths = load_native_trajs("/media/DATA_18_TB_2/andy/benchmark_set_2/trajectory_datas/chignolin")
+    make_starting_pos(top, paths, do_plot=True)
 
 if __name__ == "__main__":
     main()
