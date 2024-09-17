@@ -1,3 +1,6 @@
+# For making starting positions for batch_generate.py
+# at https://github.com/BioMedAI-UCSC/openmm_generate
+
 import glob
 import deeptime
 import mdtraj
@@ -104,8 +107,8 @@ def load_native_path(native_path: str, pdb) -> mdtraj.Trajectory:
 
 
 def main():
-    top, paths = load_native_trajs("/media/DATA_18_TB_2/andy/benchmark_set_2/trajectory_datas/chignolin")
-    make_starting_pos(top, paths, do_plot=True)
+    top, trajs = load_native_trajs("/media/DATA_18_TB_2/andy/benchmark_set_2/trajectory_datas/chignolin")
+    make_starting_pos(top, trajs, do_plot=True)
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+import subprocess
+import mdtraj
+import re
+import glob
+import os
+
+def fix_TYR(input_path: str, output_path: str):
+    traj = mdtraj.load(input_path, standard_names=False)
+
+    atoms_remove = []
+    
+    residue_pattern = re.compile("TYR[0-9]*")
+    name_pattern = re.compile(".*(T|Y)[0-9]*")
+    
+    for atom in traj.topology.atoms:
+        if residue_pattern.fullmatch(atom.residue.name):
+            if atom.name == "OXT": #daniel said this is special --andy
+                continue
+            if name_pattern.fullmatch(atom.name):
+                print(f"removing atom index: {atom.index}, name: {atom.name}")
+                atoms_remove.append(atom.index)
+    
+    atoms_to_keep = [a.index for a in traj.topology.atoms if a.index not in atoms_remove]
+
+    modified = mdtraj.load_pdb(input_path, top=traj.top, atom_indices=atoms_to_keep)
+    modified.save_pdb(output_path)
+
+OUT_PATH = "./TYR_fixed"
+
+subprocess.run(["rm", "-r", OUT_PATH])
+subprocess.run(["mkdir", OUT_PATH])
+for pdb in glob.glob('/media/DATA_18_TB_2/andy/benchmark_generate_input/*.pdb'):
+    print("DOING", pdb)
+    basename = os.path.basename(pdb)
+    fix_TYR(pdb, os.path.join(OUT_PATH, basename))
