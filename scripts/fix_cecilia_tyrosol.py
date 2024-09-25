@@ -34,7 +34,7 @@ OUT_PATH = "./TYR_fixed"
 
 subprocess.run(["rm", "-r", OUT_PATH])
 subprocess.run(["mkdir", OUT_PATH])
-for pdb in glob.glob('/media/DATA_18_TB_2/andy/benchmark_generate_input/*.pdb'):
+for pdb in glob.glob('/media/DATA_18_TB_2/andy/tica_sampled_starting_poses/chignolin_starting_positions/*.pdb'):
     print("DOING", pdb)
     basename = os.path.basename(pdb)
     fix_TYR(pdb, os.path.join(OUT_PATH, basename))
