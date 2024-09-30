@@ -75,7 +75,8 @@ def prepare_one(pdbid, data_dir=None, input_dir=None, force=False, remove_ligand
             os.remove(finished_file_path)
         else:
             print("Skipping prepare", pdbid, "(already prepared)")
-            return
+            # FIXME: It would be better to check the contents of finished.txt instead of always returning True
+            return True
 
     print("Processing", pdbid)
 
