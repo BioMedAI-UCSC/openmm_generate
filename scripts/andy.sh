@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
 
-#mdconvert -o /media/DATA_18_TB_2/andy/benchmark_generate_input_2/chignolin.pdb --topology /media/DATA_18_TB_2/andy/benchmark_set_2/trajectory_datas/chignolin/extract/filtered/filtered.psf /media/DATA_18_TB_2/andy/benchmark_set_2/trajectory_datas/chignolin/extract/filtered/filtered.pdb
+set -e
 
-rm -r ../data
+IN_DIR="/media/DATA_18_TB_2/andy/tica_sampled_starting_poses/BBA_TYR_fixed/"
+OUT_DIR="/media/DATA_18_TB_1/andy/benchmark_set_5/BBA"
+
+rm -fr "${OUT_DIR}"
+
 ./batch_generate.py \
     ./andy.json \
+    --gpus 1,2,3 \
     --prepare \
+    --integrator integrator_4fs.json \
     --remove-ligands \
-    --steps 1000000 \
-    --input-dir /media/DATA_18_TB_2/andy/benchmark_generate_input_3
+    --steps 10000000 \
+    --report-steps 100 \
+    --input-dir "${IN_DIR}" \
+    --data-dir "${OUT_DIR}"

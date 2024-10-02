@@ -107,7 +107,7 @@ def load_native_path(native_path: str, pdb) -> mdtraj.Trajectory:
 
 
 def main():
-    top, trajs = load_native_trajs("/media/DATA_18_TB_2/andy/benchmark_set_3/trajectory_datas/villin")
+    top, trajs = load_native_trajs("/media/DATA_18_TB_2/andy/benchmark_set_2/trajectory_datas/BBA")
     make_starting_pos(top, trajs, do_plot=True)
 
 if __name__ == "__main__":
