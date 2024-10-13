@@ -17,7 +17,7 @@ rm -fr "${OUT_DIR}"
     --remove-ligands \
     --steps 10000000 \
     --report-steps 100 \
-    --batch-size 60 \
-    --batch-index 0 \
+    --batch-size 50 \
+    --batch-index 2 \
     --input-dir "${IN_DIR}" \
     --data-dir "${OUT_DIR}"
