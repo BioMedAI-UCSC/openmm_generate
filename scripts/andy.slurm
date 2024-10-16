@@ -8,12 +8,11 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=32
 #SBATCH --gpus-per-task=4
-#SBATCH --gpu-bind=map_gpu:0,1,2,3
 #SBATCH --job-name=andy_openmm
-#SBATCH --array=0-10
+#SBATCH --array=0-66
 
-ANDY_IN_DIR="${HOME}/md_data/tica_sampled_starting_poses/BBA_TYR_fixed"
-ANDY_OUT_DIR="${HOME}/md_data/generate/BBA"
+ANDY_IN_DIR="/projects/bbpa/acbruce/md_data/tica_sampled_starting_poses/homeodomain_TYR_fixed"
+ANDY_OUT_DIR="/projects/bbpa/acbruce/md_data/generate/homeodomain"
 
 export OMP_NUM_THREADS=32
 echo "TASK_ID", $SLURM_ARRAY_TASK_ID
