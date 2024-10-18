@@ -9,6 +9,8 @@ import numpy as np
 import itertools
 from matplotlib import pyplot as plt
 import os
+import json
+
 
 NUM_STARTING = 100000000
 DIST_THRESH = 0.0001
@@ -83,6 +85,9 @@ def make_starting_pos(top: mdtraj.Topology, trajs: list[mdtraj.Trajectory], do_p
         plt.close()
         
     print(f"saving {len(starting_positions)} starting positions")
+    with open("points.json", "w") as f:
+        f.write(json.dumps(starting_positions_pos.tolist(), indent=4))
+    
     for i, (traj_num, frame_num) in enumerate(map(lambda x: x[1], starting_positions)):
         frame = trajs[traj_num][frame_num]
         assert frame.xyz.shape[0] == 1
@@ -90,9 +95,9 @@ def make_starting_pos(top: mdtraj.Topology, trajs: list[mdtraj.Trajectory], do_p
         traj.save(f"output/starting_pos_{i}.pdb")
 
 def load_native_trajs(native_trajs_dir: str) -> tuple[mdtraj.Topology, list[mdtraj.Trajectory]]:
-    paths = glob.glob(os.path.join(native_trajs_dir, "extract/filtered/*/*.xtc"))
+    paths = glob.glob(os.path.join(native_trajs_dir, "filtered/*/*.xtc"))
     print(f"loading {len(paths)} trajectories")
-    top = os.path.join(native_trajs_dir, "extract/filtered/filtered.pdb")
+    top = os.path.join(native_trajs_dir, "filtered/filtered.pdb")
     
     trajs = list(map(lambda p: load_native_path(p, top), paths))
 
@@ -107,7 +112,7 @@ def load_native_path(native_path: str, pdb) -> mdtraj.Trajectory:
 
 
 def main():
-    top, trajs = load_native_trajs("/media/DATA_18_TB_2/andy/benchmark_set_2/trajectory_datas/BBA")
+    top, trajs = load_native_trajs("/media/DATA_18_TB_2/andy/torchmd_data/trajectories/chignolin/extract")
     make_starting_pos(top, trajs, do_plot=True)
 
 if __name__ == "__main__":
