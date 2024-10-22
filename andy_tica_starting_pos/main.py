@@ -1,6 +1,4 @@
-# For making starting positions for batch_generate.py
-# at https://github.com/BioMedAI-UCSC/openmm_generate
-
+#!/usr/bin/env python3
 import glob
 import deeptime
 import mdtraj
@@ -10,8 +8,10 @@ import itertools
 from matplotlib import pyplot as plt
 import os
 import json
+import itertools
 
-
+INPUT_DIR = "/media/DATA_18_TB_1/andy/torchmd_data/trajectories/BBA"
+OUTPUT_DIR = "./output"
 NUM_STARTING = 100000000
 DIST_THRESH = 0.0001
 
@@ -31,19 +31,19 @@ def make_tica_model(bond_lens):
 def get_bonds(top: mdtraj.Topology) -> list[tuple[int, int]]:
     return list(map(lambda x: (x[0].index, x[1].index), top.bonds))
 
-def calc_bond_lens(traj: mdtraj.Trajectory, pairs: list[tuple[int, int]]) -> NDArray:
-    distances: NDArray = mdtraj.compute_distances(traj, pairs)
+def calc_atom_distances(traj: mdtraj.Trajectory) -> NDArray:
+    bonds = get_bonds(traj.top) #type: ignore
+    distances: NDArray = mdtraj.compute_distances(traj, bonds)
     return distances
 
-def make_starting_pos(top: mdtraj.Topology, trajs: list[mdtraj.Trajectory], do_plot=False):
+def make_starting_poses(trajs: list[mdtraj.Trajectory], do_plot=False):
     print("calculating bond lens")
-
-    bonds = get_bonds(top)
-    pairs = list(itertools.combinations(range(0, trajs[0].n_atoms), 2) if(len(bonds) == 0) else bonds)
-    bond_lens = list(map(lambda x: calc_bond_lens(x, pairs), trajs))
+    atom_distances = [calc_atom_distances(traj) for traj in trajs]
     print("done calculating bond lens")
-    tica_model = make_tica_model(bond_lens)
-    projected_datas = list(map(lambda x: tica_model.transform(x), bond_lens))
+
+    tica_model = make_tica_model(atom_distances)
+
+    projected_datas = list(map(lambda x: tica_model.transform(x), atom_distances))
 
     datas = np.concatenate(projected_datas)[:, :2]
     datas_index = np.concatenate(
@@ -91,14 +91,15 @@ def make_starting_pos(top: mdtraj.Topology, trajs: list[mdtraj.Trajectory], do_p
     for i, (traj_num, frame_num) in enumerate(map(lambda x: x[1], starting_positions)):
         frame = trajs[traj_num][frame_num]
         assert frame.xyz.shape[0] == 1
-        traj = mdtraj.Trajectory(frame.xyz, top)
-        traj.save(f"output/starting_pos_{i}.pdb")
+        traj = mdtraj.Trajectory(frame.xyz, trajs[traj_num].top)
+        traj.save(os.path.join(OUTPUT_DIR, f"starting_pos_{i}.pdb"))
 
-def load_native_trajs(native_trajs_dir: str) -> tuple[mdtraj.Topology, list[mdtraj.Trajectory]]:
-    paths = glob.glob(os.path.join(native_trajs_dir, "filtered/*/*.xtc"))
+def load_native_trajs(dir: str) -> tuple[mdtraj.Topology, list[mdtraj.Trajectory]]:
+    top = os.path.join(dir, "filtered.pdb")
+    paths = glob.glob(os.path.join(dir, "*/*.xtc"))
+
     print(f"loading {len(paths)} trajectories")
-    top = os.path.join(native_trajs_dir, "filtered/filtered.pdb")
-    
+
     trajs = list(map(lambda p: load_native_path(p, top), paths))
 
     topology = mdtraj.load(top).top
@@ -110,10 +111,20 @@ def load_native_path(native_path: str, pdb) -> mdtraj.Trajectory:
     out = mdtraj.load_xtc(native_path, top=pdb)
     return out
 
-
 def main():
-    top, trajs = load_native_trajs("/media/DATA_18_TB_1/andy/torchmd_data/trajectories/wwdomain")
-    make_starting_pos(top, trajs, do_plot=True)
+    if os.path.exists(OUTPUT_DIR):
+        raise Exception("output dir already exists")
+    os.makedirs(OUTPUT_DIR)
+    pdb_paths = glob.glob(os.path.join(INPUT_DIR, "**/filtered.pdb"), recursive=True)
+    dirs = [os.path.dirname(pdb_path) for pdb_path in pdb_paths]
+    top_and_trajs = [load_native_trajs(dir) for dir in dirs]
+
+    for top, _ in top_and_trajs:
+        assert top.n_atoms == top_and_trajs[0][0].n_atoms
+
+    trajs = [top_and_traj[1] for top_and_traj in top_and_trajs]
+    trajs = list(itertools.chain(*trajs))
+    make_starting_poses(trajs, do_plot=True)
 
 if __name__ == "__main__":
     main()
