@@ -10,7 +10,7 @@ import os
 import json
 import itertools
 
-INPUT_DIR = "/media/DATA_18_TB_1/andy/torchmd_data/trajectories/BBA"
+INPUT_DIR = "/media/DATA_18_TB_1/andy/torchmd_data/trajectories/proteinb"
 OUTPUT_DIR = "./output"
 NUM_STARTING = 100000000
 DIST_THRESH = 0.0001

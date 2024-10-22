@@ -8,7 +8,7 @@ import itertools
 
 # openmm templates fail to match cecilia pdb files since they used charmm
 # https://github.com/torchmd/torchmd-protein-thermodynamics/tree/main/Datasets
-# remove ivalid atoms on Tyrosine so it can match it
+# remove invalid atoms on Tyrosine so it can match it
 
 def fix_TYR(input_path: str, output_path: str):
     traj = mdtraj.load(input_path, standard_names=False)
@@ -31,11 +31,11 @@ def fix_TYR(input_path: str, output_path: str):
     modified = mdtraj.load_pdb(input_path, top=traj.top, atom_indices=atoms_to_keep)
     modified.save_pdb(output_path)
 
-OUT_PATH = "/media/DATA_18_TB_1/andy/tica_sampled_starting_poses/wwdomain1_TYR_fixed"
+OUT_PATH = "/media/DATA_18_TB_1/andy/tica_sampled_starting_poses/proteinb_TYR_fixed"
 
 subprocess.run(["rm", "-r", OUT_PATH])
 subprocess.run(["mkdir", OUT_PATH])
-for pdb in glob.glob('/media/DATA_18_TB_1/andy/tica_sampled_starting_poses/wwdomain1/*.pdb'):
+for pdb in glob.glob('/media/DATA_18_TB_1/andy/tica_sampled_starting_poses/proteinb/*.pdb'):
     print("DOING", pdb)
     basename = os.path.basename(pdb)
     fix_TYR(pdb, os.path.join(OUT_PATH, basename))
