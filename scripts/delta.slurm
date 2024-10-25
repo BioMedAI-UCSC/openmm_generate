@@ -9,10 +9,14 @@
 #SBATCH --cpus-per-task=32
 #SBATCH --gpus-per-task=4
 #SBATCH --job-name=andy_openmm
-#SBATCH --array=0-43
+#SBATCH --array=0-36
 
-ANDY_IN_DIR="/projects/bbpa/acbruce/md_data/tica_sampled_starting_poses/wwdomain1_TYR_fixed"
-ANDY_OUT_DIR="/projects/bbpa/acbruce/md_data/generate/wwdomain1"
+source /u/acbruce/miniconda3/etc/profile.d/conda.sh
+
+conda activate generate_delta
+
+ANDY_IN_DIR="/work/hdd/bbpa/acbruce/tica_sampled_starting_poses/wwdomain_TYR_fixed/"
+ANDY_OUT_DIR="/work/hdd/bbpa/acbruce/md_data/generate/wwdomain"
 
 export OMP_NUM_THREADS=32
 echo "TASK_ID", $SLURM_ARRAY_TASK_ID
