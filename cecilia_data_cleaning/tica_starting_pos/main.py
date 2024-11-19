@@ -10,8 +10,8 @@ import os
 import json
 import itertools
 
-INPUT_DIR = "/media/DATA_18_TB_1/andy/torchmd_data/trajectories/proteinb"
-OUTPUT_DIR = "./output"
+INPUT_DIR = "/media/DATA_18_TB_1/andy/torchmd_data/trajectories/proteing"
+OUTPUT_DIR = "/media/DATA_18_TB_1/andy/tica_sampled_starting_poses/proteing"
 NUM_STARTING = 100000000
 DIST_THRESH = 0.0001
 
@@ -42,8 +42,9 @@ def make_starting_poses(trajs: list[mdtraj.Trajectory], do_plot=False):
     print("done calculating bond lens")
 
     tica_model = make_tica_model(atom_distances)
-
+    print("projecting datas")
     projected_datas = list(map(lambda x: tica_model.transform(x), atom_distances))
+    print("done projecting datas")
 
     datas = np.concatenate(projected_datas)[:, :2]
     datas_index = np.concatenate(

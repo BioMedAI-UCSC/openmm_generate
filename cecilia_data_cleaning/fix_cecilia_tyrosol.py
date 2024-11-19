@@ -31,11 +31,11 @@ def fix_TYR(input_path: str, output_path: str):
     modified = mdtraj.load_pdb(input_path, top=traj.top, atom_indices=atoms_to_keep)
     modified.save_pdb(output_path)
 
-OUT_PATH = "/media/DATA_18_TB_1/andy/tica_sampled_starting_poses/proteinb_TYR_fixed"
+OUT_PATH = "/media/DATA_18_TB_1/andy/tica_sampled_starting_poses/proteing_TYR_fixed"
 
 subprocess.run(["rm", "-r", OUT_PATH])
 subprocess.run(["mkdir", OUT_PATH])
-for pdb in glob.glob('/media/DATA_18_TB_1/andy/tica_sampled_starting_poses/proteinb/*.pdb'):
+for pdb in glob.glob('/media/DATA_18_TB_1/andy/tica_sampled_starting_poses/proteing/*.pdb'):
     print("DOING", pdb)
     basename = os.path.basename(pdb)
     fix_TYR(pdb, os.path.join(OUT_PATH, basename))
