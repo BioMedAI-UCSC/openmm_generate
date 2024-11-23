@@ -207,7 +207,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("pdbid_list", type=str, nargs="*", help="The PDB ids to process, or .json file containing an array of PDB ids")
-    parser.add_argument("--batch-size", default=None, type=int, help="Split pdbid_list into batches of this zie")
+    parser.add_argument("--batch-size", default=None, type=int, help="Split pdbid_list into batches of this size")
     parser.add_argument("--batch-index", default=0, type=int, help="If splitting into batches, select which batch to run")
     parser.add_argument("-f", "--force", action='store_true', help="Force simulate (and prepare if enabled) to run even the requested pdbids have already finished")
     parser.add_argument("--prepare", action='store_true', help="Run prepare if the system has not already been set up")
