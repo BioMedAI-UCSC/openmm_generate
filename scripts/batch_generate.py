@@ -238,6 +238,7 @@ def main():
             pdbid_list = []
             for i in glob.glob(os.path.join(args.input_dir, "*.pdb")):
                 pdbid_list.append(os.path.splitext(os.path.basename(i))[0])
+            pdbid_list = sorted(pdbid_list)
             if not pdbid_list:
                 print(f"Could not find any pdbs in \"{args.input_dir}\"")
                 return 1
