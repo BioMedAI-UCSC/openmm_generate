@@ -207,7 +207,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("pdbid_list", type=str, nargs="*", help="The PDB ids to process, or .json file containing an array of PDB ids")
-    parser.add_argument("--batch-size", default=None, type=int, help="Split pdbid_list into batches of this zie")
+    parser.add_argument("--batch-size", default=None, type=int, help="Split pdbid_list into batches of this size")
     parser.add_argument("--batch-index", default=0, type=int, help="If splitting into batches, select which batch to run")
     parser.add_argument("-f", "--force", action='store_true', help="Force simulate (and prepare if enabled) to run even the requested pdbids have already finished")
     parser.add_argument("--prepare", action='store_true', help="Run prepare if the system has not already been set up")
@@ -238,6 +238,7 @@ def main():
             pdbid_list = []
             for i in glob.glob(os.path.join(args.input_dir, "*.pdb")):
                 pdbid_list.append(os.path.splitext(os.path.basename(i))[0])
+            pdbid_list = sorted(pdbid_list)
             if not pdbid_list:
                 print(f"Could not find any pdbs in \"{args.input_dir}\"")
                 return 1
