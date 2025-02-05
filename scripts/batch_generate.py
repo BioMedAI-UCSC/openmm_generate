@@ -63,7 +63,7 @@ def parse_integrator_params(integrator_params):
         result[k] = value
     return result
 
-def prepare_one(pdbid, data_dir=None, input_dir=None, force=False, remove_ligands=False, implicit_solvent=False):
+def prepare_one(box_size, pdbid, data_dir=None, input_dir=None, force=False, remove_ligands=False, implicit_solvent=False):
     if data_dir:
         function.set_data_dir(data_dir)
 
@@ -91,7 +91,7 @@ def prepare_one(pdbid, data_dir=None, input_dir=None, force=False, remove_ligand
                 prepare_input = os.path.join(input_dir, pdbid + ".pdb")
             else:
                 prepare_input = pdbid
-            preprocess.prepare_protein(prepare_input, remove_ligands=remove_ligands, implicit_solvent=implicit_solvent)
+            preprocess.prepare_protein(box_size, prepare_input, remove_ligands=remove_ligands, implicit_solvent=implicit_solvent)
         except Exception as e:
             ok = False
             traceback.print_tb(e.__traceback__)
@@ -114,7 +114,7 @@ def prepare_one(pdbid, data_dir=None, input_dir=None, force=False, remove_ligand
 
     return ok
 
-def simulate_one(pdbid, data_dir=None, input_dir=None, steps=10000, report_steps=1, prepare=False, remove_ligands=False,
+def simulate_one(box_size, pdbid, data_dir=None, input_dir=None, steps=10000, report_steps=1, prepare=False, remove_ligands=False,
                  prepare_implicit=False, force=False, timeout=None, integrator_params=None):
     # print("simulate_one:", pdbid, data_dir, steps, report_steps, prepare, force, timeout)
     interrupt_callback = None
@@ -129,7 +129,7 @@ def simulate_one(pdbid, data_dir=None, input_dir=None, steps=10000, report_steps
 
     if prepare:
         #TODO: Split force prepare / force simulate into separate flags?
-        if not prepare_one(pdbid, data_dir, input_dir, force, remove_ligands=remove_ligands, implicit_solvent=prepare_implicit):
+        if not prepare_one(box_size, pdbid, data_dir, input_dir, force, remove_ligands=remove_ligands, implicit_solvent=prepare_implicit):
             return
 
     finished_file_path = function.get_data_path(f'{pdbid}/simulation/finished.txt')
@@ -221,6 +221,9 @@ def main():
     parser.add_argument("--input-dir", default=None, type=str, help="Input data directory, if set PDB files will be copied from here instead of download from RCSB")
     parser.add_argument("--gpus", default=None, type=str, help="A comma delimited lists of GPUs to use e.g. '0,1,2,3'")
     parser.add_argument("--timeout", default=None, type=float, help="The maximum time to run in hours (e.g. 0.5 = 30 minutes)")
+    parser.add_argument("--box-size", default=None, type=float, nargs="?", const=0.0, 
+                         help="""Set an explicit box size, or use the box size by not providing a value
+                         listed in the pdb file (if no box size listed in pdb file or flag not used, uses openmm)""")
 
     args = parser.parse_args()
     print(args)
@@ -293,7 +296,7 @@ def main():
                            "force":args.force, "timeout":timeout,
                            "integrator_params":integrator_params}
             pending_results += [pool.apply_async(simulate_one,
-                                                 (pdbid,), kwargs_dict)]
+                                                 (args.box_size, pdbid,), kwargs_dict)]
         
         while pending_results:
             pending_results = [i for i in pending_results if not i.ready()]

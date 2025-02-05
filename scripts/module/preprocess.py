@@ -1,6 +1,7 @@
 import openmm as mm
 import openmm.app as app
 from openmm import unit
+from openmm import Vec3
 import pdbfixer
 import requests
 import json
@@ -10,13 +11,14 @@ from module import ligands
 from module import function
 
 
-def prepare_protein(pdbid=str, remove_ligands=False, implicit_solvent=False):
+def prepare_protein(box_size=None, pdbid=str, remove_ligands=False, implicit_solvent=False):
     """
     Preprocesses a protein by downloading the PDB file, fixing missing residues and atoms,
     adding missing hydrogens, adding solvent, and writing the processed PDB file.
 
     Args:
         pdbid (str): The PDB ID of the protein.
+        box_size(float): If 0.0 adds water solvent with padding = 1 Angstroms. If negative, attempts to match box size, defaulting back to padding = 1 Angstroms. If > 0, uses that value as a box size. 
 
     Returns:
         None
@@ -124,7 +126,15 @@ def prepare_protein(pdbid=str, remove_ligands=False, implicit_solvent=False):
 
     # Add the water molecules if we're using explicit solvent
     if not implicit_solvent:
-        modeller.addSolvent(forcefield, padding=1.0 * unit.nanometers, ionicStrength=0.15 * unit.molar)
+        # Attmpt to match box size
+        if box_size == 0.0 and fixer.topology.getUnitCellDimensions():
+            modeller.addSolvent(forcefield, boxSize=fixer.topology.getUnitCellDimensions() * unit.nanometers, ionicStrength=0.15 * unit.molar)
+        # Explicit box size
+        elif box_size > 0.0:
+            modeller.addSolvent(forcefield, boxSize=Vec3(box_size,box_size,box_size)*unit.nanometers, ionicStrength=0.15 * unit.molar)
+        # Adds water with padding = 1 and lets openmm decide appropriate box size
+        else:
+            modeller.addSolvent(forcefield, padding=1.0 * unit.nanometers, ionicStrength=0.15 * unit.molar)
 
     # write the processed pdb file & ligand templates
     top = modeller.getTopology()
