@@ -5,7 +5,7 @@ import traceback
 from module import function
 from module import preprocess
 from module import simulation
-from openmm.app import PDBFile
+import mdtraj
 import openff.units
 
 # Log capture
@@ -115,7 +115,7 @@ def prepare_one(pdbid, data_dir=None, input_dir=None, force=False, remove_ligand
     return ok
 
 def simulate_one(pdbid, data_dir=None, input_dir=None, steps=10000, report_steps=1, prepare=False, remove_ligands=False,
-                 prepare_implicit=False, force=False, timeout=None, integrator_params=None):
+                 prepare_implicit=False, force=False, timeout=None, integrator_params=None, atom_selection="not water"):
     # print("simulate_one:", pdbid, data_dir, steps, report_steps, prepare, force, timeout)
     interrupt_callback = None
     if timeout:
@@ -159,7 +159,8 @@ def simulate_one(pdbid, data_dir=None, input_dir=None, steps=10000, report_steps
     with RedirectOutputs() as log:
         try:
             pdb_path = function.get_data_path(f'{pdbid}/processed/{pdbid}_processed.pdb')
-            atom_indices = function.get_non_water_atom_indexes(PDBFile(pdb_path).getTopology())
+            atom_indices = mdtraj.load(pdb_path).topology.select(atom_selection)
+            assert len(atom_indices) > 0, f"atom selector found nothing to save: {atom_selection}"
             steps_run = simulation.run(pdbid, pdb_path, steps, report_steps=report_steps, atomSubset=atom_indices,
                                        resume_checkpoint=should_continue, interrupt_callback=interrupt_callback,
                                        integrator_params=integrator_params)
@@ -221,6 +222,7 @@ def main():
     parser.add_argument("--input-dir", default=None, type=str, help="Input data directory, if set PDB files will be copied from here instead of download from RCSB")
     parser.add_argument("--gpus", default=None, type=str, help="A comma delimited lists of GPUs to use e.g. '0,1,2,3'")
     parser.add_argument("--timeout", default=None, type=float, help="The maximum time to run in hours (e.g. 0.5 = 30 minutes)")
+    parser.add_argument("--atom-slice", default="not water", type=str, help="The mdtraj selector string that selects the atoms to save, default=\"not water\"")
 
     args = parser.parse_args()
     print(args)
@@ -291,7 +293,8 @@ def main():
                            "prepare_implicit":args.prepare_implicit,
                            "remove_ligands": args.remove_ligands,
                            "force":args.force, "timeout":timeout,
-                           "integrator_params":integrator_params}
+                           "integrator_params":integrator_params,
+                           "atom_selection":args.atom_slice}
             pending_results += [pool.apply_async(simulate_one,
                                                  (pdbid,), kwargs_dict)]
         
