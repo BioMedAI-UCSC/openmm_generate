@@ -10,7 +10,6 @@ import shutil
 from module import ligands
 from module import function
 
-
 def prepare_protein(box_size=None, pdbid=str, remove_ligands=False, implicit_solvent=False):
     """
     Preprocesses a protein by downloading the PDB file, fixing missing residues and atoms,
@@ -23,7 +22,6 @@ def prepare_protein(box_size=None, pdbid=str, remove_ligands=False, implicit_sol
     Returns:
         None
     """
-
     local_input_pdb_path = None
     if pdbid.endswith(".pdb"):
         local_input_pdb_path = pdbid
@@ -131,6 +129,8 @@ def prepare_protein(box_size=None, pdbid=str, remove_ligands=False, implicit_sol
             modeller.addSolvent(forcefield, boxSize=fixer.topology.getUnitCellDimensions() * unit.nanometers, ionicStrength=0.15 * unit.molar)
         # Explicit box size
         elif box_size > 0.0:
+            # convert box size from angstroms to nm
+            box_size /= 10
             modeller.addSolvent(forcefield, boxSize=Vec3(box_size,box_size,box_size)*unit.nanometers, ionicStrength=0.15 * unit.molar)
         # Adds water with padding = 1 and lets openmm decide appropriate box size
         else:

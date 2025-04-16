@@ -116,7 +116,6 @@ def prepare_one(box_size, pdbid, data_dir=None, input_dir=None, force=False, rem
 
 def simulate_one(box_size, pdbid, data_dir=None, input_dir=None, steps=10000, report_steps=1, prepare=False, remove_ligands=False,
                  prepare_implicit=False, force=False, timeout=None, integrator_params=None):
-    # print("simulate_one:", pdbid, data_dir, steps, report_steps, prepare, force, timeout)
     interrupt_callback = None
     if timeout:
         interrupt_callback = lambda timeout=timeout : timeout > time.time()
