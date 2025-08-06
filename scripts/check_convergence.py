@@ -3,6 +3,7 @@ import argparse
 from pathlib import Path
 import mdtraj
 import numpy
+import itertools
 
 
 def main():
@@ -37,8 +38,8 @@ def main():
 
 
         assert traj_ca.xyz is not None
-        
-        coords: numpy.typing.NDArray = traj_ca.xyz
+        pairs = list(itertools.combinations(range(0, traj_ca.n_atoms), 2))
+        coords: numpy.typing.NDArray = mdtraj.compute_distances(traj_ca, pairs)
         first_10_percent = int(coords.shape[0] * 0.1)
         coords = coords[first_10_percent:]
         chain_mean = numpy.mean(coords, axis=0)
